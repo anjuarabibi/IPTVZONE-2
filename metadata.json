@@ -1,0 +1,6 @@
+{
+  "name": "IPTV Zone",
+  "description": "Premium IPTV M3U channel player and FIFA World Cup live stream website featuring an administrative dashboard and sticky video player layout.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
