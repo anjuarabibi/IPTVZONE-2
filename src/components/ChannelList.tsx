@@ -13,7 +13,7 @@ interface ChannelListProps {
 
 // Global classifier for Channels
 const getChannelCategory = (channel: Channel): 'fifa' | 'sports' | 'bangla' | 'india' | 'other' => {
-  const nameLower = channel.name.toLowerCase();
+  const nameLower = (channel.name || '').toLowerCase();
   const groupLower = (channel.group || '').toLowerCase();
 
   // 1. FIFA World Cup Live Match
@@ -190,7 +190,7 @@ export default function ChannelList({
         }
       }
 
-      return a.name.localeCompare(b.name);
+      return (a.name || '').localeCompare(b.name || '');
     });
   }, [channels]);
 
@@ -203,7 +203,7 @@ export default function ChannelList({
   // Master List Filter
   const filteredAllChannels = useMemo(() => {
     return sortedChannels.filter(c => {
-      const matchSearch = c.name.toLowerCase().includes(allSearch.toLowerCase());
+      const matchSearch = (c.name || '').toLowerCase().includes(allSearch.toLowerCase());
       
       const cat = getChannelCategory(c);
       const matchCategory = allCategory === 'all' || cat === allCategory;
@@ -251,7 +251,7 @@ export default function ChannelList({
   // Filter functions for each section
   const filteredFifa = useMemo(() => {
     return fifaChannels.filter(c => {
-      const matchSearch = c.name.toLowerCase().includes(fifaSearch.toLowerCase());
+      const matchSearch = (c.name || '').toLowerCase().includes(fifaSearch.toLowerCase());
       const matchGroup = fifaGroup === 'all' || c.group === fifaGroup;
       return matchSearch && matchGroup;
     });
@@ -259,7 +259,7 @@ export default function ChannelList({
 
   const filteredSports = useMemo(() => {
     return sportsChannels.filter(c => {
-      const matchSearch = c.name.toLowerCase().includes(sportsSearch.toLowerCase());
+      const matchSearch = (c.name || '').toLowerCase().includes(sportsSearch.toLowerCase());
       const matchGroup = sportsGroup === 'all' || c.group === sportsGroup;
       return matchSearch && matchGroup;
     });
@@ -267,7 +267,7 @@ export default function ChannelList({
 
   const filteredBangla = useMemo(() => {
     return banglaChannels.filter(c => {
-      const matchSearch = c.name.toLowerCase().includes(banglaSearch.toLowerCase());
+      const matchSearch = (c.name || '').toLowerCase().includes(banglaSearch.toLowerCase());
       const matchGroup = banglaGroup === 'all' || c.group === banglaGroup;
       return matchSearch && matchGroup;
     });
@@ -275,7 +275,7 @@ export default function ChannelList({
 
   const filteredIndia = useMemo(() => {
     return indiaChannels.filter(c => {
-      const matchSearch = c.name.toLowerCase().includes(indiaSearch.toLowerCase());
+      const matchSearch = (c.name || '').toLowerCase().includes(indiaSearch.toLowerCase());
       const matchGroup = indiaGroup === 'all' || c.group === indiaGroup;
       return matchSearch && matchGroup;
     });
@@ -283,7 +283,7 @@ export default function ChannelList({
 
   const filteredOther = useMemo(() => {
     return otherChannels.filter(c => {
-      const matchSearch = c.name.toLowerCase().includes(otherSearch.toLowerCase());
+      const matchSearch = (c.name || '').toLowerCase().includes(otherSearch.toLowerCase());
       const matchGroup = otherGroup === 'all' || c.group === otherGroup;
       return matchSearch && matchGroup;
     });

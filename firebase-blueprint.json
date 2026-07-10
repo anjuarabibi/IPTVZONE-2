@@ -1,0 +1,64 @@
+{
+  "entities": {
+    "SiteSettings": {
+      "title": "SiteSettings",
+      "description": "IPTV Player site configuration and settings.",
+      "type": "object",
+      "properties": {
+        "siteTitle": { "type": "string" },
+        "bannerUrl": { "type": "string" },
+        "bannerTitle": { "type": "string" },
+        "bannerSubtitle": { "type": "string" },
+        "featuredGroup": { "type": "string" },
+        "fifaKeywords": { "type": "string" },
+        "autoRemoveDead": { "type": "boolean" }
+      },
+      "required": ["siteTitle", "bannerUrl", "bannerTitle", "bannerSubtitle", "featuredGroup", "fifaKeywords", "autoRemoveDead"]
+    },
+    "Playlist": {
+      "title": "Playlist",
+      "description": "An imported M3U playlist.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "url": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "channelCount": { "type": "integer" }
+      },
+      "required": ["id", "name", "url", "createdAt", "channelCount"]
+    },
+    "Channel": {
+      "title": "Channel",
+      "description": "An IPTV stream channel.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "url": { "type": "string" },
+        "logo": { "type": "string" },
+        "group": { "type": "string" },
+        "isFeatured": { "type": "boolean" },
+        "isFifa": { "type": "boolean" },
+        "score": { "type": "integer" },
+        "isDead": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "url", "logo", "group", "isFeatured", "isFifa", "score", "isDead", "createdAt"]
+    }
+  },
+  "firestore": {
+    "config/settings": {
+      "schema": "SiteSettings",
+      "description": "Global settings for the IPTV application"
+    },
+    "playlists": {
+      "schema": "Playlist",
+      "description": "Imported M3U Playlists"
+    },
+    "channels": {
+      "schema": "Channel",
+      "description": "Individual IPTV stream channels"
+    }
+  }
+}

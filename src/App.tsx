@@ -98,7 +98,7 @@ function MiniChannelLogo({ channel }: { channel: Channel }) {
   }, [resolvedLogo, channel.id]);
   
   const logoUrl = React.useMemo(() => {
-    if (!resolvedLogo) return '';
+    if (typeof resolvedLogo !== 'string' || !resolvedLogo.trim()) return '';
     const cleanUrl = resolvedLogo.trim();
     if (!cleanUrl) return '';
     if (cleanUrl.startsWith('/') || cleanUrl.startsWith('data:') || cleanUrl.includes('images.unsplash.com') || cleanUrl.includes('upload.wikimedia.org')) {
@@ -118,7 +118,7 @@ function MiniChannelLogo({ channel }: { channel: Channel }) {
     );
   }
 
-  const firstLetter = channel.name.trim().charAt(0).toUpperCase() || '?';
+  const firstLetter = String(channel.name || '').trim().charAt(0).toUpperCase() || '?';
   return (
     <div className="w-6 h-6 rounded flex items-center justify-center bg-rose-950/40 text-rose-400 font-sans text-[10px] font-extrabold border border-rose-500/20 flex-shrink-0 select-none uppercase">
       {firstLetter}
@@ -408,10 +408,10 @@ export default function App() {
     // Check if there is another working duplicate with the same name
     const targetChannel = channels.find(c => c.id === channelId);
     if (targetChannel) {
-      const targetNameNormalized = targetChannel.name.trim().toLowerCase();
+      const targetNameNormalized = (targetChannel.name || '').trim().toLowerCase();
       const hasWorkingDuplicate = channels.some(c => 
         c.id !== channelId && 
-        c.name.trim().toLowerCase() === targetNameNormalized && 
+        (c.name || '').trim().toLowerCase() === targetNameNormalized && 
         !c.isDead
       );
 

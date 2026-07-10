@@ -5,7 +5,8 @@ import { getChannelLogo } from '../utils/logoResolver';
 import { cleanChannelName, cleanGroupName } from './VideoPlayer';
 
 // Extract channel name initials for display on the fallback card
-const getInitials = (name: string) => {
+const getInitials = (name?: string) => {
+  if (typeof name !== 'string' || !name.trim()) return '?';
   const clean = name.replace(/[^a-zA-Z0-9\s]/g, '').trim();
   const words = clean.split(/\s+/).filter(Boolean);
   if (words.length >= 2) {
@@ -15,7 +16,7 @@ const getInitials = (name: string) => {
 };
 
 // Generate a high-contrast premium color gradient based on the channel name
-const getGradientClass = (name: string) => {
+const getGradientClass = (name?: string) => {
   const gradients = [
     'from-rose-600 to-amber-500',
     'from-violet-600 to-indigo-600',
@@ -25,6 +26,7 @@ const getGradientClass = (name: string) => {
     'from-fuchsia-600 to-pink-600',
     'from-rose-500 to-indigo-500'
   ];
+  if (typeof name !== 'string' || !name.trim()) return gradients[0];
   let sum = 0;
   for (let i = 0; i < name.length; i++) {
     sum += name.charCodeAt(i);
@@ -64,7 +66,7 @@ export default function ChannelCard({
 
   // Parse and wrap the logo URL in a secure CDN proxy to solve Mixed-Content & CORS issues
   const logoUrl = useMemo(() => {
-    if (!resolvedLogo) return '';
+    if (typeof resolvedLogo !== 'string' || !resolvedLogo.trim()) return '';
     const cleanUrl = resolvedLogo.trim();
     if (!cleanUrl) return '';
 

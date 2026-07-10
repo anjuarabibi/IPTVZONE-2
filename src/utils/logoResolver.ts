@@ -8,7 +8,7 @@ import { Channel } from '../types';
 
 export function getChannelLogo(name: string, currentLogo?: string): string {
   // If the channel has a valid custom logo URL from user/playlist, use it
-  if (currentLogo && currentLogo.trim()) {
+  if (currentLogo && typeof currentLogo === 'string' && currentLogo.trim()) {
     const clean = currentLogo.trim();
     // Use it directly if it looks valid
     if (clean.startsWith('http') || clean.startsWith('/') || clean.startsWith('data:')) {
@@ -16,7 +16,7 @@ export function getChannelLogo(name: string, currentLogo?: string): string {
     }
   }
 
-  const cleanName = name.toLowerCase().trim();
+  const cleanName = (name || '').toLowerCase().trim();
 
   // 1. Bein Sports (all variations: Bein Sports 1, 2, 3, Max, Premium, Direct, Arabic)
   if (cleanName.includes('bein') && (cleanName.includes('sport') || cleanName.includes('direct') || cleanName.includes('tekrar'))) {

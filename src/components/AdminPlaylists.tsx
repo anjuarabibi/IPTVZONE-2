@@ -203,13 +203,13 @@ export default function AdminPlaylists({
         
         const response = await fetch(corsProxyUrl);
         if (!response.ok) {
-          throw new Error('Could not fetch playlist content. Please check the URL or try another proxy.');
+          throw new Error(`Could not fetch playlist content (Status: ${response.status} ${response.statusText}). If you are deployed on Vercel, please make sure your Supabase environment variables (SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY) are configured in your Vercel project settings to enable server-side fetching.`);
         }
         
         const m3uContent = await response.text();
         const lines = m3uContent.split('\n');
         const importedChannels: Channel[] = [];
-        const fifaKeywords = settings.fifaKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
+        const fifaKeywords = (settings?.fifaKeywords || '').split(',').map(k => (k || '').trim().toLowerCase()).filter(Boolean);
         
         let currentChannel: Partial<Channel> = {};
         

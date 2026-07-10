@@ -4,8 +4,8 @@ import { Plus, Search, Edit2, Trash2, ShieldAlert, Check, RefreshCw, AlertCircle
 import { getChannelLogo } from '../utils/logoResolver';
 
 // Helper to categorize channel automatically into 5 standard groups requested by the user
-function autoCategorize(name: string, originalGroup: string): { group: string; isFifa: boolean } {
-  const nameLower = name.toLowerCase();
+function autoCategorize(name?: string, originalGroup?: string): { group: string; isFifa: boolean } {
+  const nameLower = (name || '').toLowerCase();
   const groupLower = (originalGroup || '').toLowerCase();
   const fifaKeywords = ['fifa', 'world cup', 'worldcup', 'match', 'live'];
 
@@ -158,7 +158,7 @@ function AdminChannelLogo({ channel }: { channel: Channel }) {
   }, [resolvedLogo, channel.id]);
   
   const logoUrl = useMemo(() => {
-    if (!resolvedLogo) return '';
+    if (typeof resolvedLogo !== 'string' || !resolvedLogo.trim()) return '';
     const cleanUrl = resolvedLogo.trim();
     if (!cleanUrl) return '';
     if (cleanUrl.startsWith('/') || cleanUrl.startsWith('data:') || cleanUrl.includes('images.unsplash.com') || cleanUrl.includes('upload.wikimedia.org')) {
@@ -178,7 +178,7 @@ function AdminChannelLogo({ channel }: { channel: Channel }) {
     );
   }
 
-  const firstLetter = channel.name.trim().charAt(0).toUpperCase() || '?';
+  const firstLetter = String(channel.name || '').trim().charAt(0).toUpperCase() || '?';
   return (
     <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-rose-950/40 text-rose-400 font-sans text-xs font-black border border-rose-500/20 flex-shrink-0 select-none uppercase">
       {firstLetter}
@@ -230,8 +230,8 @@ export default function AdminChannels({
   // Filter and sort channels so starred ones are at the top chronologically
   const filteredChannels = useMemo(() => {
     const filtered = channels.filter((c) => {
-      const matchesSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                            c.group.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesSearch = (c.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
+                            (c.group || '').toLowerCase().includes(searchQuery.toLowerCase());
       const matchesGroup = filterGroup === 'all' || c.group === filterGroup;
       return matchesSearch && matchesGroup;
     });
@@ -250,7 +250,7 @@ export default function AdminChannels({
         }
       }
 
-      return a.name.localeCompare(b.name);
+      return (a.name || '').localeCompare(b.name || '');
     });
   }, [channels, searchQuery, filterGroup]);
 
@@ -428,7 +428,7 @@ export default function AdminChannels({
       // Local storage deduplication fallback
       const groups: { [key: string]: Channel[] } = {};
       for (const c of channels) {
-        const key = c.name.trim().toLowerCase();
+        const key = (c.name || '').trim().toLowerCase();
         if (!groups[key]) groups[key] = [];
         groups[key].push(c);
       }
