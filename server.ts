@@ -421,7 +421,7 @@ app.post('/api/playlists', async (req, res) => {
 
     // Auto-register any new categories found in the imported playlist
     try {
-      registerCategoriesFromChannels(importedChannels);
+      await registerCategoriesFromChannels(importedChannels);
     } catch (catErr: any) {
       console.error('Category auto-registration warning:', catErr);
     }
@@ -480,7 +480,7 @@ app.post('/api/playlists/:playlistId/channels-chunk', async (req, res) => {
 
     // Auto-register any new categories found in this chunk
     try {
-      registerCategoriesFromChannels(channels);
+      await registerCategoriesFromChannels(channels);
     } catch (catErr: any) {
       console.error('Category auto-registration warning:', catErr);
     }
@@ -542,7 +542,7 @@ app.post('/api/channels', async (req, res) => {
     };
 
     await addChannel(newChannel);
-    registerCategoriesFromChannels([newChannel]);
+    await registerCategoriesFromChannels([newChannel]);
     res.json(newChannel);
   } catch (error: any) {
     res.status(500).json({ error: error.message || 'Failed to add channel' });
@@ -568,7 +568,7 @@ app.put('/api/channels/:id', async (req, res) => {
     }
 
     const updated = await updateChannel(id, updatedFields);
-    registerCategoriesFromChannels([updated]);
+    await registerCategoriesFromChannels([updated]);
     res.json(updated);
   } catch (error: any) {
     res.status(500).json({ error: error.message || 'Failed to update channel' });
@@ -586,32 +586,79 @@ app.delete('/api/channels/:id', async (req, res) => {
   }
 });
 
-// Categories JSON persistence
+// Categories JSON persistence using Supabase settings table (fallback to local JSON and in-memory cache)
 const CATEGORIES_FILE = path.join(process.cwd(), 'data-categories.json');
+let categoriesCache: any[] | null = null;
 
-function readCategories(): any[] {
+async function readCategories(): Promise<any[]> {
+  try {
+    const supabase = getSupabase();
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('settings')
+        .select('*')
+        .eq('key', 'categories')
+        .maybeSingle();
+
+      if (!error && data && data.value) {
+        const parsed = Array.isArray(data.value) ? data.value : JSON.parse(data.value);
+        categoriesCache = parsed;
+        return parsed;
+      }
+    }
+  } catch (dbErr) {
+    console.warn('Supabase readCategories failed, falling back:', dbErr);
+  }
+
+  if (categoriesCache !== null) {
+    return categoriesCache;
+  }
+
   try {
     if (fs.existsSync(CATEGORIES_FILE)) {
-      return JSON.parse(fs.readFileSync(CATEGORIES_FILE, 'utf8'));
+      const fileData = JSON.parse(fs.readFileSync(CATEGORIES_FILE, 'utf8'));
+      categoriesCache = fileData;
+      return fileData;
     }
   } catch (e) {
-    console.error('Error reading categories file:', e);
+    console.error('Error reading local categories file:', e);
   }
+
+  categoriesCache = [];
   return [];
 }
 
-function writeCategories(categories: any[]) {
+async function writeCategories(categories: any[]) {
+  categoriesCache = categories;
+
+  try {
+    const supabase = getSupabase();
+    if (supabase) {
+      const { error } = await supabase
+        .from('settings')
+        .upsert({ key: 'categories', value: categories });
+      if (!error) {
+        console.log('Categories successfully saved to Supabase settings.');
+        return;
+      } else {
+        console.error('Supabase categories upsert error:', error);
+      }
+    }
+  } catch (dbErr) {
+    console.error('Supabase writeCategories failed:', dbErr);
+  }
+
   try {
     fs.writeFileSync(CATEGORIES_FILE, JSON.stringify(categories, null, 2), 'utf8');
   } catch (e) {
-    console.error('Error writing categories file:', e);
+    console.error('Error writing local categories file:', e);
   }
 }
 
 // Automatically register missing categories from a list of channels
-function registerCategoriesFromChannels(channels: Channel[]) {
+async function registerCategoriesFromChannels(channels: Channel[]) {
   try {
-    const existingCategories = readCategories();
+    const existingCategories = await readCategories();
     let updated = false;
 
     for (const channel of channels) {
@@ -634,7 +681,7 @@ function registerCategoriesFromChannels(channels: Channel[]) {
     }
 
     if (updated) {
-      writeCategories(existingCategories);
+      await writeCategories(existingCategories);
     }
   } catch (error) {
     console.error('Failed to auto-register categories:', error);
@@ -642,22 +689,22 @@ function registerCategoriesFromChannels(channels: Channel[]) {
 }
 
 // Categories endpoints
-app.get('/api/categories', (req, res) => {
+app.get('/api/categories', async (req, res) => {
   try {
-    const categories = readCategories();
+    const categories = await readCategories();
     res.json(categories);
   } catch (error: any) {
     res.status(500).json({ error: error.message || 'Failed to get categories' });
   }
 });
 
-app.post('/api/categories', (req, res) => {
+app.post('/api/categories', async (req, res) => {
   try {
     const { name, isStarred } = req.body;
     if (!name || typeof name !== 'string' || !name.trim()) {
       return res.status(400).json({ error: 'Category Name is required' });
     }
-    const categories = readCategories();
+    const categories = await readCategories();
     const newCategory = {
       id: `cat-${Math.random().toString(36).substring(2, 11)}`,
       name: name.trim(),
@@ -665,18 +712,18 @@ app.post('/api/categories', (req, res) => {
       createdAt: new Date().toISOString()
     };
     categories.push(newCategory);
-    writeCategories(categories);
+    await writeCategories(categories);
     res.json(newCategory);
   } catch (error: any) {
     res.status(500).json({ error: error.message || 'Failed to create category' });
   }
 });
 
-app.put('/api/categories/:id', (req, res) => {
+app.put('/api/categories/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const { name, isStarred } = req.body;
-    const categories = readCategories();
+    const categories = await readCategories();
     const idx = categories.findIndex(c => c.id === id);
     if (idx === -1) {
       return res.status(404).json({ error: 'Category not found' });
@@ -687,19 +734,19 @@ app.put('/api/categories/:id', (req, res) => {
     if (isStarred !== undefined) {
       categories[idx].isStarred = !!isStarred;
     }
-    writeCategories(categories);
+    await writeCategories(categories);
     res.json(categories[idx]);
   } catch (error: any) {
     res.status(500).json({ error: error.message || 'Failed to update category' });
   }
 });
 
-app.delete('/api/categories/:id', (req, res) => {
+app.delete('/api/categories/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const categories = readCategories();
+    const categories = await readCategories();
     const filtered = categories.filter(c => c.id !== id);
-    writeCategories(filtered);
+    await writeCategories(filtered);
     res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ error: error.message || 'Failed to delete category' });
