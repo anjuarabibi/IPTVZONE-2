@@ -1,180 +1,33 @@
-import React, { useState, useMemo } from 'react';
-import { Channel } from '../types';
+import React, { useState, useMemo, useRef } from 'react';
+import { Channel, Category } from '../types';
 import ChannelCard from './ChannelCard';
-import { Trophy, Star, Tv, Search, SlidersHorizontal, AlertCircle, Globe, Activity, Compass } from 'lucide-react';
+import { Star, Tv, Search, SlidersHorizontal, AlertCircle, Tag, Grid, Sparkles, Filter, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface ChannelListProps {
   channels: Channel[];
+  categories: Category[];
   activeChannel: Channel | null;
   onSelectChannel: (channel: Channel) => void;
   onToggleFavorite: (channelId: string) => void;
   isCompact?: boolean;
 }
 
-// Global classifier for Channels
-const getChannelCategory = (channel: Channel): 'fifa' | 'sports' | 'bangla' | 'india' | 'other' => {
-  const nameLower = (channel.name || '').toLowerCase();
-  const groupLower = (channel.group || '').toLowerCase();
-
-  // 1. FIFA World Cup Live Match
-  const isFifa = channel.isFifa ||
-                 nameLower.includes('fifa') || 
-                 nameLower.includes('world cup') || 
-                 nameLower.includes('worldcup') || 
-                 nameLower.includes('wcup') || 
-                 nameLower.includes('fifa live') ||
-                 groupLower.includes('fifa') || 
-                 groupLower.includes('world cup') || 
-                 groupLower.includes('worldcup') ||
-                 groupLower === 'fifa world cup';
-
-  if (isFifa) return 'fifa';
-
-  // 2. Sports channels
-  const isSports = nameLower.includes('sports') || 
-                   nameLower.includes('sport') || 
-                   nameLower.includes('cricket') || 
-                   nameLower.includes('football') || 
-                   nameLower.includes('ten 1') || 
-                   nameLower.includes('ten 2') || 
-                   nameLower.includes('ten 3') || 
-                   nameLower.includes('ten 4') || 
-                   nameLower.includes('espn') || 
-                   nameLower.includes('bein') || 
-                   nameLower.includes('sky ') || 
-                   nameLower.includes('wwe') || 
-                   nameLower.includes('willow') || 
-                   nameLower.includes('astro') || 
-                   nameLower.includes('arena') || 
-                   nameLower.includes('supersport') || 
-                   nameLower.includes('t sports') || 
-                   nameLower.includes('t-sports') || 
-                   nameLower.includes('gtv sports') || 
-                   groupLower.includes('sports') || 
-                   groupLower.includes('sport') || 
-                   groupLower.includes('live sports') ||
-                   groupLower === 'sports tv channel';
-
-  if (isSports) return 'sports';
-
-  // 3. Bangladesh / Bangla channels
-  const isBangla = nameLower.includes('bangla') || 
-                   nameLower.includes('somoy') ||
-                   nameLower.includes('independent tv') ||
-                   nameLower.includes('jamuna') ||
-                   nameLower.includes('ekattor') ||
-                   nameLower.includes('gazi tv') ||
-                   nameLower.includes('gtv') ||
-                   nameLower.includes('rtv') ||
-                   nameLower.includes('ntv') ||
-                   nameLower.includes('maasranga') ||
-                   nameLower.includes('deepto') ||
-                   nameLower.includes('channel i') ||
-                   nameLower.includes('atn') ||
-                   nameLower.includes('nagorik') ||
-                   nameLower.includes('desh tv') ||
-                   nameLower.includes('news24') ||
-                   nameLower.includes('duronto') ||
-                   nameLower.includes('asian tv') ||
-                   nameLower.includes('btsv') ||
-                   nameLower.includes('btv') ||
-                   nameLower.includes('somoy') ||
-                   nameLower.includes('samay') ||
-                   nameLower.includes('ekushey') ||
-                   nameLower.includes('boishakhi') ||
-                   nameLower.includes('bijoy') ||
-                   nameLower.includes('nexusto') ||
-                   nameLower.includes('mohona') ||
-                   nameLower.includes('saatv') ||
-                   nameLower.includes('etv bd') ||
-                   nameLower.includes('channel 24') ||
-                   nameLower.includes('channel24') ||
-                   nameLower.includes('dhaka') ||
-                   nameLower.includes(' bd') || 
-                   nameLower.startsWith('bd ') ||
-                   nameLower.includes(' bd ') ||
-                   groupLower.includes('bangladesh') || 
-                   groupLower.includes('bangla') || 
-                   groupLower.includes('bd') ||
-                   groupLower === 'bangla tv channel';
-
-  if (isBangla) return 'bangla';
-
-  // 4. India / Hindi channels
-  const isIndia = nameLower.includes('india') ||
-                  nameLower.includes('indian') ||
-                  nameLower.includes('star jalsha') ||
-                  nameLower.includes('jalsha') ||
-                  nameLower.includes('zee bangla') ||
-                  nameLower.includes('colors bangla') ||
-                  nameLower.includes('sony aath') ||
-                  nameLower.includes('star plus') ||
-                  nameLower.includes('zee tv') ||
-                  nameLower.includes('colors tv') ||
-                  nameLower.includes('sony entertainment') ||
-                  nameLower.includes('set max') ||
-                  nameLower.includes('sony max') ||
-                  nameLower.includes('star gold') ||
-                  nameLower.includes('zee cinema') ||
-                  nameLower.includes('colors cineplex') ||
-                  nameLower.includes('india today') ||
-                  nameLower.includes('ndtv') ||
-                  nameLower.includes('republic') ||
-                  nameLower.includes('aaj tak') ||
-                  nameLower.includes('zee news') ||
-                  nameLower.includes('abp news') ||
-                  nameLower.includes('dd ') ||
-                  nameLower.includes('doordarshan') ||
-                  groupLower.includes('india') ||
-                  groupLower.includes('indian') ||
-                  groupLower.includes('hindi') ||
-                  groupLower === 'india tv channel';
-
-  if (isIndia) return 'india';
-
-  return 'other';
-};
-
 export default function ChannelList({
   channels,
+  categories,
   activeChannel,
   onSelectChannel,
   onToggleFavorite,
   isCompact = false,
 }: ChannelListProps) {
-  // View mode state: 'all' (Unified All Groups/All Categories list) or 'sections' (separate categorized blocks)
-  const [viewMode, setViewMode] = useState<'all' | 'sections'>('all');
-
-  // Master Unified State (All 253 TV channels)
   const [allSearch, setAllSearch] = useState('');
-  const [allCategory, setAllCategory] = useState('all');
+  const [selectedCategoryId, setSelectedCategoryId] = useState('all');
   const [allGroup, setAllGroup] = useState('all');
+  const [isTopCategoriesDropdownOpen, setIsTopCategoriesDropdownOpen] = useState(false);
+  const [isBottomCategoriesExpanded, setIsBottomCategoriesExpanded] = useState(false);
+  const topRef = useRef<HTMLDivElement>(null);
 
-  // Section 1: FIFA Channels State
-  const [fifaSearch, setFifaSearch] = useState('');
-  const [fifaGroup, setFifaGroup] = useState('all');
-
-  // Section 2: Sports Channels State
-  const [sportsSearch, setSportsSearch] = useState('');
-  const [sportsGroup, setSportsGroup] = useState('all');
-
-  // Section 3: Bangladesh Channels State
-  const [banglaSearch, setBanglaSearch] = useState('');
-  const [banglaGroup, setBanglaGroup] = useState('all');
-
-  // Section 4: India Channels State
-  const [indiaSearch, setIndiaSearch] = useState('');
-  const [indiaGroup, setIndiaGroup] = useState('all');
-
-  // Section 5: Other Channels State
-  const [otherSearch, setOtherSearch] = useState('');
-  const [otherGroup, setOtherGroup] = useState('all');
-
-  // Sort channels so that:
-  // 1. Starred/Featured channels come first.
-  // 2. Starred channels are sorted chronologically by when they were starred (starredAt ASC).
-  //    The 1st channel starred goes to position 1, 2nd to position 2, and so on.
-  // 3. Fallback to name-based sorting.
+  // Sort channels so featured ones are first, chronologically, then by name
   const sortedChannels = useMemo(() => {
     return [...channels].sort((a, b) => {
       const aFeatured = !!a.isFeatured;
@@ -186,7 +39,7 @@ export default function ChannelList({
         const aTime = a.starredAt ? new Date(a.starredAt).getTime() : 0;
         const bTime = b.starredAt ? new Date(b.starredAt).getTime() : 0;
         if (aTime !== bTime) {
-          return aTime - bTime; // oldest star first (chronological order)
+          return aTime - bTime;
         }
       }
 
@@ -194,542 +47,221 @@ export default function ChannelList({
     });
   }, [channels]);
 
-  // Master List dropdown filters computation (based on preserved original M3U group or fallback category group)
+  // Extract all distinct M3U group titles
   const allGroups = useMemo(() => {
     const groups = new Set(sortedChannels.map(c => c.originalGroup || c.group).filter(Boolean));
     return ['all', ...Array.from(groups)];
   }, [sortedChannels]);
 
-  // Master List Filter
+  // Sort categories: Pinned/Starred first, then alphabetical
+  const sortedCategories = useMemo(() => {
+    return [...categories].sort((a, b) => {
+      if (a.isStarred && !b.isStarred) return -1;
+      if (!a.isStarred && b.isStarred) return 1;
+      return (a.name || '').localeCompare(b.name || '');
+    });
+  }, [categories]);
+
+  // Calculate channel count dynamically for each category
+  const categoryCounts = useMemo(() => {
+    const counts: { [key: string]: number } = {};
+    channels.forEach(c => {
+      const g = (c.group || '').toLowerCase().trim();
+      const og = (c.originalGroup || '').toLowerCase().trim();
+      categories.forEach(cat => {
+        const catName = (cat.name || '').toLowerCase().trim();
+        if (g === catName || og === catName) {
+          counts[cat.id] = (counts[cat.id] || 0) + 1;
+        }
+      });
+    });
+    return counts;
+  }, [channels, categories]);
+
+  // Filter channels based on Search, Group, and Selected Category
   const filteredAllChannels = useMemo(() => {
     return sortedChannels.filter(c => {
       const matchSearch = (c.name || '').toLowerCase().includes(allSearch.toLowerCase());
       
-      const cat = getChannelCategory(c);
-      const matchCategory = allCategory === 'all' || cat === allCategory;
+      let matchCategory = true;
+      if (selectedCategoryId !== 'all') {
+        const targetCat = categories.find(cat => cat.id === selectedCategoryId);
+        if (targetCat) {
+          const catName = (targetCat.name || '').toLowerCase().trim();
+          const g = (c.group || '').toLowerCase().trim();
+          const og = (c.originalGroup || '').toLowerCase().trim();
+          matchCategory = g === catName || og === catName;
+        }
+      }
 
       const userGroup = c.originalGroup || c.group;
       const matchGroup = allGroup === 'all' || userGroup === allGroup;
 
       return matchSearch && matchCategory && matchGroup;
     });
-  }, [sortedChannels, allSearch, allCategory, allGroup]);
+  }, [sortedChannels, allSearch, selectedCategoryId, allGroup, categories]);
 
-  // Segregate channels strictly by priority so there are no duplicates
-  const fifaChannels = useMemo(() => sortedChannels.filter(c => getChannelCategory(c) === 'fifa'), [sortedChannels]);
-  const sportsChannels = useMemo(() => sortedChannels.filter(c => getChannelCategory(c) === 'sports'), [sortedChannels]);
-  const banglaChannels = useMemo(() => sortedChannels.filter(c => getChannelCategory(c) === 'bangla'), [sortedChannels]);
-  const indiaChannels = useMemo(() => sortedChannels.filter(c => getChannelCategory(c) === 'india'), [sortedChannels]);
-  const otherChannels = useMemo(() => sortedChannels.filter(c => getChannelCategory(c) === 'other'), [sortedChannels]);
+  const activeCategoryName = useMemo(() => {
+    if (selectedCategoryId === 'all') return 'All Channels (সব চ্যানেল)';
+    return categories.find(c => c.id === selectedCategoryId)?.name || 'Filtered channels';
+  }, [selectedCategoryId, categories]);
 
-  // Extract unique groups for each section for the dropdown menus
-  const fifaGroups = useMemo(() => {
-    const groups = new Set(fifaChannels.map(c => c.group));
-    return ['all', ...Array.from(groups)];
-  }, [fifaChannels]);
-
-  const sportsGroups = useMemo(() => {
-    const groups = new Set(sportsChannels.map(c => c.group));
-    return ['all', ...Array.from(groups)];
-  }, [sportsChannels]);
-
-  const banglaGroups = useMemo(() => {
-    const groups = new Set(banglaChannels.map(c => c.group));
-    return ['all', ...Array.from(groups)];
-  }, [banglaChannels]);
-
-  const indiaGroups = useMemo(() => {
-    const groups = new Set(indiaChannels.map(c => c.group));
-    return ['all', ...Array.from(groups)];
-  }, [indiaChannels]);
-
-  const otherGroups = useMemo(() => {
-    const groups = new Set(otherChannels.map(c => c.group));
-    return ['all', ...Array.from(groups)];
-  }, [otherChannels]);
-
-  // Filter functions for each section
-  const filteredFifa = useMemo(() => {
-    return fifaChannels.filter(c => {
-      const matchSearch = (c.name || '').toLowerCase().includes(fifaSearch.toLowerCase());
-      const matchGroup = fifaGroup === 'all' || c.group === fifaGroup;
-      return matchSearch && matchGroup;
-    });
-  }, [fifaChannels, fifaSearch, fifaGroup]);
-
-  const filteredSports = useMemo(() => {
-    return sportsChannels.filter(c => {
-      const matchSearch = (c.name || '').toLowerCase().includes(sportsSearch.toLowerCase());
-      const matchGroup = sportsGroup === 'all' || c.group === sportsGroup;
-      return matchSearch && matchGroup;
-    });
-  }, [sportsChannels, sportsSearch, sportsGroup]);
-
-  const filteredBangla = useMemo(() => {
-    return banglaChannels.filter(c => {
-      const matchSearch = (c.name || '').toLowerCase().includes(banglaSearch.toLowerCase());
-      const matchGroup = banglaGroup === 'all' || c.group === banglaGroup;
-      return matchSearch && matchGroup;
-    });
-  }, [banglaChannels, banglaSearch, banglaGroup]);
-
-  const filteredIndia = useMemo(() => {
-    return indiaChannels.filter(c => {
-      const matchSearch = (c.name || '').toLowerCase().includes(indiaSearch.toLowerCase());
-      const matchGroup = indiaGroup === 'all' || c.group === indiaGroup;
-      return matchSearch && matchGroup;
-    });
-  }, [indiaChannels, indiaSearch, indiaGroup]);
-
-  const filteredOther = useMemo(() => {
-    return otherChannels.filter(c => {
-      const matchSearch = (c.name || '').toLowerCase().includes(otherSearch.toLowerCase());
-      const matchGroup = otherGroup === 'all' || c.group === otherGroup;
-      return matchSearch && matchGroup;
-    });
-  }, [otherChannels, otherSearch, otherGroup]);
+  const handleCategorySelect = (id: string) => {
+    setSelectedCategoryId(id);
+    // Smooth scroll back to listings area when changing category
+    topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   return (
-    <div id="channel-listings" className="w-full flex flex-col gap-8">
-      {/* View Mode Tabs (Sleek modern tabs) */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-neutral-800/80 pb-4 gap-4">
-        <div className="flex gap-2 bg-neutral-900/60 p-1.5 rounded-xl border border-neutral-800/80 w-fit">
-          <button
-            onClick={() => setViewMode('all')}
-            className={`px-4 py-2 rounded-lg text-xs font-sans font-semibold transition-all flex items-center gap-2 ${
-              viewMode === 'all'
-                ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/20'
-                : 'text-neutral-400 hover:text-white hover:bg-neutral-800/30'
-            }`}
-          >
-            <Tv size={14} />
-            <span>All Groups ({sortedChannels.length} Channels)</span>
-            <span className="text-[10px] opacity-75 font-normal ml-0.5">সব চ্যানেল এক সাথে</span>
-          </button>
-          <button
-            onClick={() => setViewMode('sections')}
-            className={`px-4 py-2 rounded-lg text-xs font-sans font-semibold transition-all flex items-center gap-2 ${
-              viewMode === 'sections'
-                ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/20'
-                : 'text-neutral-400 hover:text-white hover:bg-neutral-800/30'
-            }`}
-          >
-            <Trophy size={14} />
-            <span>By Categories</span>
-            <span className="text-[10px] opacity-75 font-normal ml-0.5">ক্যাটাগরি অনুযায়ী</span>
-          </button>
+    <div id="channel-listings" className="w-full flex flex-col gap-6" ref={topRef}>
+      
+      {/* 1. Header Filter Controls Bar */}
+      <div className="relative z-30 flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-5 bg-gradient-to-r from-neutral-900/60 to-neutral-950/60 backdrop-blur-xl rounded-2xl border border-neutral-800/80 shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
+        <div className="flex flex-col gap-1">
+          <h3 className="font-sans font-black text-sm text-white flex items-center gap-2">
+            <span className="flex items-center justify-center w-5 h-5 rounded-md bg-rose-500/10 border border-rose-500/20 text-rose-500">
+              <Filter size={11} />
+            </span>
+            <span>{activeCategoryName}</span>
+          </h3>
+          <p className="font-sans text-[11px] text-neutral-400 leading-normal">
+            Found <span className="text-rose-400 font-bold">{filteredAllChannels.length}</span> active TV channels matching your active filters.
+          </p>
         </div>
 
-        {/* Total stats */}
-        <div className="font-sans text-xs text-neutral-400">
-          Total Channels Loaded: <span className="text-white font-bold bg-neutral-900 px-2 py-1 rounded-md border border-neutral-800">{sortedChannels.length}</span>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 w-full lg:w-auto items-center relative">
+          {/* Category Dropdown Button (সব ক্যাটাগরি বাটন) */}
+          <div className="relative">
+            <button
+              onClick={() => setIsTopCategoriesDropdownOpen(!isTopCategoriesDropdownOpen)}
+              className={`w-full flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl bg-gradient-to-b from-neutral-900 to-neutral-950 border text-xs font-bold tracking-wide transition-all duration-300 cursor-pointer text-left min-w-[170px] select-none active:scale-[0.98] ${
+                isTopCategoriesDropdownOpen
+                  ? 'border-rose-500/80 text-rose-400 shadow-[0_0_15px_rgba(244,63,94,0.2)] bg-neutral-950'
+                  : 'border-neutral-800 text-neutral-300 hover:border-rose-500/50 hover:text-white hover:shadow-[0_0_12px_rgba(244,63,94,0.12)]'
+              }`}
+            >
+              <div className="flex items-center gap-2 truncate">
+                <span className={`p-1 rounded-md transition-colors ${isTopCategoriesDropdownOpen ? 'bg-rose-500/20 border border-rose-500/30' : 'bg-neutral-900 border border-neutral-800'}`}>
+                  <Tag size={11} className={`${isTopCategoriesDropdownOpen ? 'text-rose-400' : 'text-rose-500'} flex-shrink-0`} />
+                </span>
+                <span className="truncate">
+                  {selectedCategoryId === 'all' ? 'All Categories' : activeCategoryName}
+                </span>
+              </div>
+              {isTopCategoriesDropdownOpen ? (
+                <ChevronUp size={12} className="text-rose-400 flex-shrink-0 transition-transform duration-300" />
+              ) : (
+                <ChevronDown size={12} className="text-neutral-500 flex-shrink-0 hover:text-neutral-300 transition-transform duration-300" />
+              )}
+            </button>
+
+            {isTopCategoriesDropdownOpen && (
+              <>
+                <div 
+                  className="fixed inset-0 z-40" 
+                  onClick={() => setIsTopCategoriesDropdownOpen(false)}
+                />
+                <div className="absolute right-0 sm:left-0 top-full mt-2.5 w-72 max-h-80 bg-neutral-950/95 backdrop-blur-xl border border-neutral-850 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.95)] p-2 z-50 overflow-y-auto scrollbar-thin flex flex-col gap-1 animate-fadeIn">
+                  <div className="px-2.5 py-2 text-[9px] font-extrabold text-neutral-500 border-b border-neutral-900/80 mb-1.5 flex items-center justify-between tracking-widest">
+                    <span>SELECT CATEGORY (ক্যাটাগরি)</span>
+                    <span className="text-[9px] bg-rose-500/10 text-rose-400 px-2 py-0.5 rounded-md font-bold">
+                      {categories.length + 1}
+                    </span>
+                  </div>
+                  
+                  {/* Option: All Categories */}
+                  <button
+                    onClick={() => {
+                      handleCategorySelect('all');
+                      setIsTopCategoriesDropdownOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-left text-xs font-semibold border transition-all duration-200 ${
+                      selectedCategoryId === 'all'
+                        ? 'bg-rose-500/10 text-rose-400 border-rose-500/20 shadow-[inset_0_1px_10px_rgba(244,63,94,0.08)]'
+                        : 'text-neutral-300 hover:bg-neutral-900 hover:text-white border-transparent hover:border-neutral-800'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Tv size={12} className={selectedCategoryId === 'all' ? 'text-rose-400' : 'text-neutral-400'} />
+                      <span>All Channels (সব ক্যাটাগরি)</span>
+                    </div>
+                    <span className="text-[9px] font-bold text-neutral-400 bg-neutral-900 border border-neutral-800/80 px-2 py-0.5 rounded-lg">
+                      {channels.length}
+                    </span>
+                  </button>
+
+                  {/* Options: Dynamic Categories */}
+                  {sortedCategories.map((cat) => {
+                    const isActive = selectedCategoryId === cat.id;
+                    const count = categoryCounts[cat.id] || 0;
+                    return (
+                      <button
+                        key={cat.id}
+                        onClick={() => {
+                          handleCategorySelect(cat.id);
+                          setIsTopCategoriesDropdownOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-left text-xs font-semibold border transition-all duration-200 ${
+                          isActive
+                            ? 'bg-rose-500/10 text-rose-400 border-rose-500/20 shadow-[inset_0_1px_10px_rgba(244,63,94,0.08)]'
+                            : 'text-neutral-300 hover:bg-neutral-900 hover:text-white border-transparent hover:border-neutral-800'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          {cat.isStarred ? (
+                            <Star size={12} fill="currentColor" className="text-amber-400 flex-shrink-0" />
+                          ) : (
+                            <Tag size={12} className={`${isActive ? 'text-rose-400' : 'text-neutral-400'} flex-shrink-0`} />
+                          )}
+                          <span className="truncate">{cat.name}</span>
+                        </div>
+                        <span className="text-[9px] font-bold text-neutral-400 bg-neutral-900 border border-neutral-800/80 px-2 py-0.5 rounded-lg flex-shrink-0">
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Search Input */}
+          <div className="relative group w-full">
+            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center justify-center p-1 rounded-md transition-colors bg-neutral-900 border border-neutral-800 group-focus-within:border-rose-500/30 group-focus-within:bg-rose-500/10">
+              <Search size={11} className="text-neutral-500 group-focus-within:text-rose-400 transition-colors" />
+            </span>
+            <input
+              type="text"
+              placeholder="Search channels..."
+              value={allSearch}
+              onChange={(e) => setAllSearch(e.target.value)}
+              className="w-full pl-11 pr-4 py-2.5 rounded-xl bg-gradient-to-b from-neutral-900 to-neutral-950 border border-neutral-800 focus:border-rose-500/80 focus:outline-none focus:ring-1 focus:ring-rose-500/20 font-sans text-xs text-white placeholder-neutral-500 transition-all duration-300 focus:shadow-[0_0_15px_rgba(244,63,94,0.15)] group-hover:border-neutral-700/80"
+            />
+          </div>
         </div>
       </div>
 
-      {/* RENDER VIEW MODE ALL */}
-      {viewMode === 'all' ? (
-        <div className="flex flex-col gap-6">
-          {/* Controls Bar for Unified View */}
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-4 bg-neutral-900/40 rounded-2xl border border-neutral-800/60">
-            <div className="flex flex-col gap-1">
-              <h3 className="font-sans font-bold text-sm text-white">All Channels Directory (সব গ্রুপ একসাথে)</h3>
-              <p className="font-sans text-[11px] text-neutral-400">
-                You can filter all {sortedChannels.length} channels from any categories and any custom groups here.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full lg:w-auto">
-              {/* Search */}
-              <div className="relative">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
-                <input
-                  type="text"
-                  placeholder="Search channels..."
-                  value={allSearch}
-                  onChange={(e) => setAllSearch(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 rounded-xl bg-neutral-950 border border-neutral-800 focus:border-rose-500 focus:outline-none font-sans text-xs text-white"
-                />
-              </div>
-
-              {/* Category Filter */}
-              <div className="relative">
-                <select
-                  value={allCategory}
-                  onChange={(e) => {
-                    setAllCategory(e.target.value);
-                    // Keep group as is or reset if needed
-                  }}
-                  className="appearance-none w-full pl-3 pr-8 py-2 rounded-xl bg-neutral-950 border border-neutral-800 text-xs text-neutral-300 font-sans cursor-pointer focus:border-rose-500 focus:outline-none"
-                >
-                  <option value="all">All Categories ({sortedChannels.length})</option>
-                  <option value="fifa">⚽ FIFA World Cup ({fifaChannels.length})</option>
-                  <option value="sports">🎾 Sports TV Channel ({sportsChannels.length})</option>
-                  <option value="bangla">🇧🇩 Bangla TV Channel ({banglaChannels.length})</option>
-                  <option value="india">🇮🇳 India TV Channel ({indiaChannels.length})</option>
-                  <option value="other">📺 Other TV Channel ({otherChannels.length})</option>
-                </select>
-                <SlidersHorizontal size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 pointer-events-none" />
-              </div>
-
-              {/* Group Filter */}
-              <div className="relative">
-                <select
-                  value={allGroup}
-                  onChange={(e) => setAllGroup(e.target.value)}
-                  className="appearance-none w-full pl-3 pr-8 py-2 rounded-xl bg-neutral-950 border border-neutral-800 text-xs text-neutral-300 font-sans cursor-pointer focus:border-rose-500 focus:outline-none"
-                >
-                  <option value="all">All Original Groups ({allGroups.length - 1})</option>
-                  {allGroups.slice(1).map((g) => (
-                    <option key={g} value={g}>{g}</option>
-                  ))}
-                </select>
-                <SlidersHorizontal size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 pointer-events-none" />
-              </div>
-            </div>
-          </div>
-
-          {/* Grid display */}
-          {filteredAllChannels.length > 0 ? (
-            <div className={`grid grid-cols-2 ${isCompact ? 'md:grid-cols-2 lg:grid-cols-3' : 'md:grid-cols-3 lg:grid-cols-4'} gap-4`}>
-              {filteredAllChannels.map((channel) => (
-                <ChannelCard
-                  key={channel.id}
-                  channel={channel}
-                  isPlaying={activeChannel?.id === channel.id}
-                  onSelect={onSelectChannel}
-                  onToggleFavorite={onToggleFavorite}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="p-12 bg-neutral-900/20 rounded-2xl border border-neutral-800/40 text-center flex flex-col items-center justify-center max-w-md mx-auto w-full my-6">
-              <AlertCircle className="text-rose-500/80 mb-3 animate-pulse" size={32} />
-              <h4 className="font-sans font-bold text-sm text-white mb-1">No Channels Found</h4>
-              <p className="font-sans text-xs text-neutral-500 max-w-xs">
-                No TV channels match your search or filter settings in this view. Try changing your filters.
-              </p>
-            </div>
-          )}
+      {/* 2. Channel Cards Grid */}
+      {filteredAllChannels.length > 0 ? (
+        <div className={`grid grid-cols-2 ${isCompact ? 'md:grid-cols-2 lg:grid-cols-3' : 'md:grid-cols-3 lg:grid-cols-4'} gap-4`}>
+          {filteredAllChannels.map((channel) => (
+            <ChannelCard
+              key={channel.id}
+              channel={channel}
+              isPlaying={activeChannel?.id === channel.id}
+              onSelect={onSelectChannel}
+              onToggleFavorite={onToggleFavorite}
+            />
+          ))}
         </div>
       ) : (
-        /* RENDER CATEGORY SECTIONS */
-        <div className="flex flex-col gap-10">
-          {/* SECTION 1: FIFA WORLD CUP LIVE (Pinned at the very top) */}
-          {fifaChannels.length > 0 && (
-            <div id="fifa-section" className="flex flex-col gap-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-neutral-800">
-                {/* Section Header */}
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-500 border border-amber-500/20">
-                    <Trophy size={16} className="fill-amber-500/10" />
-                  </div>
-                  <h2 className="font-sans font-bold text-base text-white tracking-tight flex items-center gap-2">
-                    FIFA World Cup Live <span className="px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-500 text-[10px] uppercase font-bold tracking-wider">PINNED</span>
-                  </h2>
-                </div>
-
-                {/* Section filters */}
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                  {/* Search */}
-                  <div className="relative flex-grow sm:flex-grow-0">
-                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
-                    <input
-                      type="text"
-                      placeholder="Search channels..."
-                      value={fifaSearch}
-                      onChange={(e) => setFifaSearch(e.target.value)}
-                      className="w-full sm:w-48 pl-9 pr-4 py-1.5 rounded-xl bg-neutral-900 border border-neutral-800 focus:border-rose-500 focus:outline-none font-sans text-xs text-white"
-                    />
-                  </div>
-                  {/* Dropdown Category select */}
-                  <div className="relative">
-                    <select
-                      value={fifaGroup}
-                      onChange={(e) => setFifaGroup(e.target.value)}
-                      className="appearance-none w-full sm:w-40 pl-3 pr-8 py-1.5 rounded-xl bg-neutral-900 border border-neutral-800 text-xs text-neutral-300 font-sans cursor-pointer focus:border-rose-500 focus:outline-none"
-                    >
-                      <option value="all">All groups ({fifaChannels.length})</option>
-                      {fifaGroups.slice(1).map((g) => (
-                        <option key={g} value={g}>{g}</option>
-                      ))}
-                    </select>
-                    <SlidersHorizontal size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 pointer-events-none" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Grid display */}
-              {filteredFifa.length > 0 ? (
-                <div className={`grid grid-cols-2 ${isCompact ? 'md:grid-cols-2 lg:grid-cols-3' : 'md:grid-cols-3 lg:grid-cols-4'} gap-4`}>
-                  {filteredFifa.map((channel) => (
-                    <ChannelCard
-                      key={channel.id}
-                      channel={channel}
-                      isPlaying={activeChannel?.id === channel.id}
-                      onSelect={onSelectChannel}
-                      onToggleFavorite={onToggleFavorite}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div className="p-8 bg-neutral-900/40 rounded-2xl border border-neutral-800/60 text-center flex flex-col items-center">
-                  <AlertCircle className="text-neutral-500 mb-2" size={20} />
-                  <p className="font-sans text-xs text-neutral-400">No FIFA World Cup channels match your query.</p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* SECTION 2: SPORTS TV CHANNELS (খেলাধুলা) */}
-          <div id="sports-section" className="flex flex-col gap-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-neutral-800">
-              {/* Section Header */}
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-rose-500/10 flex items-center justify-center text-rose-500 border border-rose-500/20">
-                  <Activity size={16} />
-                </div>
-                <h2 className="font-sans font-bold text-base text-white tracking-tight flex items-center gap-2">
-                  Sports TV Channels <span className="text-xs text-rose-400 font-normal ml-1">খেলাধুলা</span>
-                </h2>
-              </div>
-
-              {/* Section filters */}
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <div className="relative flex-grow sm:flex-grow-0">
-                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
-                  <input
-                    type="text"
-                    placeholder="Search sports..."
-                    value={sportsSearch}
-                    onChange={(e) => setSportsSearch(e.target.value)}
-                    className="w-full sm:w-48 pl-9 pr-4 py-1.5 rounded-xl bg-neutral-900 border border-neutral-800 focus:border-rose-500 focus:outline-none font-sans text-xs text-white"
-                  />
-                </div>
-                <div className="relative">
-                  <select
-                    value={sportsGroup}
-                    onChange={(e) => setSportsGroup(e.target.value)}
-                    className="appearance-none w-full sm:w-40 pl-3 pr-8 py-1.5 rounded-xl bg-neutral-900 border border-neutral-800 text-xs text-neutral-300 font-sans cursor-pointer focus:border-rose-500 focus:outline-none"
-                  >
-                    <option value="all">All groups ({sportsChannels.length})</option>
-                    {sportsGroups.slice(1).map((g) => (
-                      <option key={g} value={g}>{g}</option>
-                    ))}
-                  </select>
-                  <SlidersHorizontal size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 pointer-events-none" />
-                </div>
-              </div>
-            </div>
-
-            {/* Grid display */}
-            {filteredSports.length > 0 ? (
-              <div className={`grid grid-cols-2 ${isCompact ? 'md:grid-cols-2 lg:grid-cols-3' : 'md:grid-cols-3 lg:grid-cols-4'} gap-4`}>
-                {filteredSports.map((channel) => (
-                  <ChannelCard
-                    key={channel.id}
-                    channel={channel}
-                    isPlaying={activeChannel?.id === channel.id}
-                    onSelect={onSelectChannel}
-                    onToggleFavorite={onToggleFavorite}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="p-8 bg-neutral-900/40 rounded-2xl border border-neutral-800/60 text-center flex flex-col items-center">
-                <AlertCircle className="text-neutral-500 mb-2" size={20} />
-                <p className="font-sans text-xs text-neutral-400">No sports channels match your query.</p>
-              </div>
-            )}
-          </div>
-
-          {/* SECTION 3: BANGLA TV CHANNELS (বাংলাদেশ) */}
-          <div id="bangla-section" className="flex flex-col gap-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-neutral-800">
-              {/* Section Header */}
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400 border border-emerald-500/20">
-                  <Globe size={16} />
-                </div>
-                <h2 className="font-sans font-bold text-base text-white tracking-tight flex items-center gap-2">
-                  Bangla TV Channels <span className="text-xs text-emerald-400 font-normal ml-1">বাংলাদেশ</span>
-                </h2>
-              </div>
-
-              {/* Section filters */}
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <div className="relative flex-grow sm:flex-grow-0">
-                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
-                  <input
-                    type="text"
-                    placeholder="Search Bangla..."
-                    value={banglaSearch}
-                    onChange={(e) => setBanglaSearch(e.target.value)}
-                    className="w-full sm:w-48 pl-9 pr-4 py-1.5 rounded-xl bg-neutral-900 border border-neutral-800 focus:border-rose-500 focus:outline-none font-sans text-xs text-white"
-                  />
-                </div>
-                <div className="relative">
-                  <select
-                    value={banglaGroup}
-                    onChange={(e) => setBanglaGroup(e.target.value)}
-                    className="appearance-none w-full sm:w-40 pl-3 pr-8 py-1.5 rounded-xl bg-neutral-900 border border-neutral-800 text-xs text-neutral-300 font-sans cursor-pointer focus:border-rose-500 focus:outline-none"
-                  >
-                    <option value="all">All groups ({banglaChannels.length})</option>
-                    {banglaGroups.slice(1).map((g) => (
-                      <option key={g} value={g}>{g}</option>
-                    ))}
-                  </select>
-                  <SlidersHorizontal size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 pointer-events-none" />
-                </div>
-              </div>
-            </div>
-
-            {/* Grid display */}
-            {filteredBangla.length > 0 ? (
-              <div className={`grid grid-cols-2 ${isCompact ? 'md:grid-cols-2 lg:grid-cols-3' : 'md:grid-cols-3 lg:grid-cols-4'} gap-4`}>
-                {filteredBangla.map((channel) => (
-                  <ChannelCard
-                    key={channel.id}
-                    channel={channel}
-                    isPlaying={activeChannel?.id === channel.id}
-                    onSelect={onSelectChannel}
-                    onToggleFavorite={onToggleFavorite}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="p-8 bg-neutral-900/40 rounded-2xl border border-neutral-800/60 text-center flex flex-col items-center">
-                <AlertCircle className="text-neutral-500 mb-2" size={20} />
-                <p className="font-sans text-xs text-neutral-400">No Bangla channels match your query.</p>
-              </div>
-            )}
-          </div>
-
-          {/* SECTION 4: INDIA TV CHANNELS (ভারত) */}
-          <div id="india-section" className="flex flex-col gap-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-neutral-800">
-              {/* Section Header */}
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-400 border border-indigo-500/20">
-                  <Compass size={16} />
-                </div>
-                <h2 className="font-sans font-bold text-base text-white tracking-tight flex items-center gap-2">
-                  India TV Channels <span className="text-xs text-indigo-400 font-normal ml-1">ভারত টিভি</span>
-                </h2>
-              </div>
-
-              {/* Section filters */}
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <div className="relative flex-grow sm:flex-grow-0">
-                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
-                  <input
-                    type="text"
-                    placeholder="Search India..."
-                    value={indiaSearch}
-                    onChange={(e) => setIndiaSearch(e.target.value)}
-                    className="w-full sm:w-48 pl-9 pr-4 py-1.5 rounded-xl bg-neutral-900 border border-neutral-800 focus:border-rose-500 focus:outline-none font-sans text-xs text-white"
-                  />
-                </div>
-                <div className="relative">
-                  <select
-                    value={indiaGroup}
-                    onChange={(e) => setIndiaGroup(e.target.value)}
-                    className="appearance-none w-full sm:w-40 pl-3 pr-8 py-1.5 rounded-xl bg-neutral-900 border border-neutral-800 text-xs text-neutral-300 font-sans cursor-pointer focus:border-rose-500 focus:outline-none"
-                  >
-                    <option value="all">All groups ({indiaChannels.length})</option>
-                    {indiaGroups.slice(1).map((g) => (
-                      <option key={g} value={g}>{g}</option>
-                    ))}
-                  </select>
-                  <SlidersHorizontal size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 pointer-events-none" />
-                </div>
-              </div>
-            </div>
-
-            {/* Grid display */}
-            {filteredIndia.length > 0 ? (
-              <div className={`grid grid-cols-2 ${isCompact ? 'md:grid-cols-2 lg:grid-cols-3' : 'md:grid-cols-3 lg:grid-cols-4'} gap-4`}>
-                {filteredIndia.map((channel) => (
-                  <ChannelCard
-                    key={channel.id}
-                    channel={channel}
-                    isPlaying={activeChannel?.id === channel.id}
-                    onSelect={onSelectChannel}
-                    onToggleFavorite={onToggleFavorite}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="p-8 bg-neutral-900/40 rounded-2xl border border-neutral-800/60 text-center flex flex-col items-center">
-                <AlertCircle className="text-neutral-500 mb-2" size={20} />
-                <p className="font-sans text-xs text-neutral-400">No India channels match your query.</p>
-              </div>
-            )}
-          </div>
-
-          {/* SECTION 5: ALL OTHER CHANNELS */}
-          <div id="all-channels-section" className="flex flex-col gap-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-neutral-800">
-              {/* Section Header */}
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-neutral-800 flex items-center justify-center text-rose-500 border border-neutral-700/50">
-                  <Tv size={16} />
-                </div>
-                <h2 className="font-sans font-bold text-base text-white tracking-tight">
-                  Other Live TV Channels
-                </h2>
-              </div>
-
-              {/* Section filters */}
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <div className="relative flex-grow sm:flex-grow-0">
-                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
-                  <input
-                    type="text"
-                    placeholder="Search other..."
-                    value={otherSearch}
-                    onChange={(e) => setOtherSearch(e.target.value)}
-                    className="w-full sm:w-48 pl-9 pr-4 py-1.5 rounded-xl bg-neutral-900 border border-neutral-800 focus:border-rose-500 focus:outline-none font-sans text-xs text-white"
-                  />
-                </div>
-                <div className="relative">
-                  <select
-                    value={otherGroup}
-                    onChange={(e) => setOtherGroup(e.target.value)}
-                    className="appearance-none w-full sm:w-40 pl-3 pr-8 py-1.5 rounded-xl bg-neutral-900 border border-neutral-800 text-xs text-neutral-300 font-sans cursor-pointer focus:border-rose-500 focus:outline-none"
-                  >
-                    <option value="all">All groups ({otherChannels.length})</option>
-                    {otherGroups.slice(1).map((g) => (
-                      <option key={g} value={g}>{g}</option>
-                    ))}
-                  </select>
-                  <SlidersHorizontal size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 pointer-events-none" />
-                </div>
-              </div>
-            </div>
-
-            {/* Grid display */}
-            {filteredOther.length > 0 ? (
-              <div className={`grid grid-cols-2 ${isCompact ? 'md:grid-cols-2 lg:grid-cols-3' : 'md:grid-cols-3 lg:grid-cols-4'} gap-4`}>
-                {filteredOther.map((channel) => (
-                  <ChannelCard
-                    key={channel.id}
-                    channel={channel}
-                    isPlaying={activeChannel?.id === channel.id}
-                    onSelect={onSelectChannel}
-                    onToggleFavorite={onToggleFavorite}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="p-12 bg-neutral-900/40 rounded-2xl border border-neutral-800/60 text-center flex flex-col items-center">
-                <AlertCircle className="text-neutral-500 mb-2" size={24} />
-                <p className="font-sans text-sm text-neutral-300 font-semibold mb-1">No other channels found</p>
-                <p className="font-sans text-xs text-neutral-500 max-w-sm">
-                  We couldn't find any channels matching your filter criteria. Try clearing search or select another group.
-                </p>
-              </div>
-            )}
-          </div>
+        <div className="p-12 bg-neutral-900/20 rounded-2xl border border-neutral-800/40 text-center flex flex-col items-center justify-center max-w-md mx-auto w-full my-6">
+          <AlertCircle className="text-rose-500/80 mb-3 animate-pulse" size={32} />
+          <h4 className="font-sans font-bold text-sm text-white mb-1">No Channels Found</h4>
+          <p className="font-sans text-xs text-neutral-500 max-w-xs">
+            No TV channels match your search or category filters in this view. Try changing your filters.
+          </p>
         </div>
       )}
     </div>

@@ -33,4 +33,12 @@ export interface SiteSettings {
 }
 
 export type ActiveTab = 'home' | 'live' | 'video' | 'admin';
-export type AdminSubTab = 'playlists' | 'channels' | 'settings';
+export type AdminSubTab = 'playlists' | 'channels' | 'settings' | 'categories';
+
+export interface Category {
+  id: string;
+  name: string;
+  isStarred: boolean;
+  createdAt: string;
+}
+

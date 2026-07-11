@@ -1,0 +1,200 @@
+[
+  {
+    "id": "cat-live-bdix",
+    "name": "[LIVE] BDIX",
+    "isStarred": true,
+    "createdAt": "2026-07-11T00:00:00.000Z"
+  },
+  {
+    "id": "cat-indian-bangla",
+    "name": "Indian-Bangla",
+    "isStarred": true,
+    "createdAt": "2026-07-11T00:00:00.000Z"
+  },
+  {
+    "id": "cat-football",
+    "name": "Football",
+    "isStarred": true,
+    "createdAt": "2026-07-11T00:00:00.000Z"
+  },
+  {
+    "id": "cat-kolkata-bangla",
+    "name": "Kolkata Bangla",
+    "isStarred": true,
+    "createdAt": "2026-07-11T00:00:00.000Z"
+  },
+  {
+    "id": "cat-english-movies",
+    "name": "English Movies",
+    "isStarred": false,
+    "createdAt": "2026-07-11T00:00:00.000Z"
+  },
+  {
+    "id": "cat-islamic-channels",
+    "name": "ISLAMIC CHANNELS",
+    "isStarred": false,
+    "createdAt": "2026-07-11T00:00:00.000Z"
+  },
+  {
+    "id": "cat-news-english",
+    "name": "News English",
+    "isStarred": false,
+    "createdAt": "2026-07-11T00:00:00.000Z"
+  },
+  {
+    "id": "cat-infotainment",
+    "name": "Infotainment (Infotainment Channels)",
+    "isStarred": false,
+    "createdAt": "2026-07-11T00:00:00.000Z"
+  },
+  {
+    "id": "cat-radio-fm",
+    "name": "Radio FM",
+    "isStarred": false,
+    "createdAt": "2026-07-11T00:00:00.000Z"
+  },
+  {
+    "id": "cat-unknown",
+    "name": "Unknown",
+    "isStarred": false,
+    "createdAt": "2026-07-11T00:00:00.000Z"
+  },
+  {
+    "id": "cat-bangla-bangladeshi",
+    "name": "Bangla (Bangladeshi)",
+    "isStarred": true,
+    "createdAt": "2026-07-11T00:00:00.000Z"
+  },
+  {
+    "id": "cat-information",
+    "name": "Information",
+    "isStarred": false,
+    "createdAt": "2026-07-11T00:00:00.000Z"
+  },
+  {
+    "id": "cat-bangla-movies",
+    "name": "Bangla Movies",
+    "isStarred": false,
+    "createdAt": "2026-07-11T00:00:00.000Z"
+  },
+  {
+    "id": "cat-religion-channel",
+    "name": "Relagion Channel",
+    "isStarred": false,
+    "createdAt": "2026-07-11T00:00:00.000Z"
+  },
+  {
+    "id": "cat-hindi-movies",
+    "name": "Hindi Movies",
+    "isStarred": false,
+    "createdAt": "2026-07-11T00:00:00.000Z"
+  },
+  {
+    "id": "cat-hindi-news",
+    "name": "Hindi News",
+    "isStarred": false,
+    "createdAt": "2026-07-11T00:00:00.000Z"
+  },
+  {
+    "id": "cat-music",
+    "name": "MUSIC",
+    "isStarred": false,
+    "createdAt": "2026-07-11T00:00:00.000Z"
+  },
+  {
+    "id": "cat-entertainment",
+    "name": "Entertainment",
+    "isStarred": false,
+    "createdAt": "2026-07-11T00:00:00.000Z"
+  },
+  {
+    "id": "cat-kids",
+    "name": "Kids",
+    "isStarred": false,
+    "createdAt": "2026-07-11T00:00:00.000Z"
+  },
+  {
+    "id": "cat-akash-go",
+    "name": "Akash Go",
+    "isStarred": false,
+    "createdAt": "2026-07-11T00:00:00.000Z"
+  },
+  {
+    "id": "cat-bd-vs-zim",
+    "name": "BD VS ZIM",
+    "isStarred": true,
+    "createdAt": "2026-07-11T00:00:00.000Z"
+  },
+  {
+    "id": "cat-fifa-world-cup",
+    "name": "FIFA World Cup 2026",
+    "isStarred": true,
+    "createdAt": "2026-07-11T00:00:00.000Z"
+  },
+  {
+    "id": "cat-hindi-dabbing-movies",
+    "name": "Hindi Dabbing Movies",
+    "isStarred": false,
+    "createdAt": "2026-07-11T00:00:00.000Z"
+  },
+  {
+    "id": "cat-utrun-broadband",
+    "name": "Utrun Broadband",
+    "isStarred": false,
+    "createdAt": "2026-07-11T00:00:00.000Z"
+  },
+  {
+    "id": "cat-movies",
+    "name": "Movies",
+    "isStarred": false,
+    "createdAt": "2026-07-11T00:00:00.000Z"
+  },
+  {
+    "id": "cat-news-internasional",
+    "name": "NEWS INTERNASIONAL",
+    "isStarred": false,
+    "createdAt": "2026-07-11T00:00:00.000Z"
+  },
+  {
+    "id": "cat-sports",
+    "name": "SPORTS",
+    "isStarred": true,
+    "createdAt": "2026-07-11T00:00:00.000Z"
+  },
+  {
+    "id": "cat-cricket",
+    "name": "Cricket",
+    "isStarred": true,
+    "createdAt": "2026-07-11T00:00:00.000Z"
+  },
+  {
+    "id": "cat-cartoon-drama",
+    "name": "CARTOON Drama",
+    "isStarred": false,
+    "createdAt": "2026-07-11T00:00:00.000Z"
+  },
+  {
+    "id": "cat-documentary",
+    "name": "Documentary",
+    "isStarred": false,
+    "createdAt": "2026-07-11T00:00:00.000Z"
+  },
+  {
+    "id": "cat-indian-bangla-news",
+    "name": "Indian Bangla News",
+    "isStarred": false,
+    "createdAt": "2026-07-11T00:00:00.000Z"
+  },
+  {
+    "id": "cat-english-news",
+    "name": "English News",
+    "isStarred": false,
+    "createdAt": "2026-07-11T00:00:00.000Z"
+  },
+  {
+    "id": "cat-bangla-news",
+    "name": "Bangla News",
+    "isStarred": true,
+    "createdAt": "2026-07-11T00:00:00.000Z"
+  }
+]

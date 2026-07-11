@@ -15,6 +15,8 @@ export default function AdminSettings({ settings, onSaveSettings }: AdminSetting
   const [featuredGroup, setFeaturedGroup] = useState(settings.featuredGroup);
   const [fifaKeywords, setFifaKeywords] = useState(settings.fifaKeywords);
   const [autoRemoveDead, setAutoRemoveDead] = useState(settings.autoRemoveDead);
+  const [isUploadingBanner, setIsUploadingBanner] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const [saved, setSaved] = useState(false);
 
@@ -72,14 +74,65 @@ export default function AdminSettings({ settings, onSaveSettings }: AdminSetting
           </span>
 
           <div className="flex flex-col gap-1.5">
-            <label className="font-sans text-[11px] font-semibold text-neutral-400">Banner Background Image URL</label>
-            <input
-              type="url"
-              value={bannerUrl}
-              onChange={(e) => setBannerUrl(e.target.value)}
-              className="w-full px-4 py-2 rounded-xl bg-neutral-950 border border-neutral-800 focus:border-rose-500 focus:outline-none font-sans text-xs text-white"
-              placeholder="https://images.unsplash.com/photo-..."
-            />
+            <label className="font-sans text-[11px] font-semibold text-neutral-400">Banner Background Image URL or Upload</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={bannerUrl}
+                onChange={(e) => setBannerUrl(e.target.value)}
+                className="flex-grow px-4 py-2 rounded-xl bg-neutral-950 border border-neutral-800 focus:border-rose-500 focus:outline-none font-sans text-xs text-white"
+                placeholder="https://images.unsplash.com/photo-..."
+              />
+              <div className="relative">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setIsUploadingBanner(true);
+                    setUploadError(null);
+                    try {
+                      const reader = new FileReader();
+                      reader.readAsDataURL(file);
+                      reader.onload = async () => {
+                        const base64 = reader.result as string;
+                        const response = await fetch('/api/upload', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            fileData: base64,
+                            fileName: file.name,
+                            mimeType: file.type
+                          })
+                        });
+                        const data = await response.json();
+                        if (response.ok && data.url) {
+                          setBannerUrl(data.url);
+                        } else {
+                          throw new Error(data.error || 'Upload failed');
+                        }
+                      };
+                    } catch (err: any) {
+                      setUploadError(err.message || 'Banner upload failed');
+                    } finally {
+                      setIsUploadingBanner(false);
+                    }
+                  }}
+                  className="hidden"
+                  id="banner-file-upload"
+                />
+                <label
+                  htmlFor="banner-file-upload"
+                  className="px-4 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-sans text-xs font-bold transition-all cursor-pointer inline-flex items-center justify-center border border-neutral-700 h-full whitespace-nowrap"
+                >
+                  {isUploadingBanner ? 'Uploading...' : 'Upload'}
+                </label>
+              </div>
+            </div>
+            {uploadError && (
+              <span className="font-sans text-[10px] text-rose-500">{uploadError}</span>
+            )}
           </div>
 
           <div className="flex flex-col gap-1.5">

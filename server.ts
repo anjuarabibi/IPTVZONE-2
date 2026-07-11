@@ -1,6 +1,9 @@
 import 'dotenv/config';
 import express from 'express';
 import path from 'path';
+import http from 'http';
+import https from 'https';
+import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { Channel, Playlist, SiteSettings } from './src/types';
 import {
@@ -14,7 +17,8 @@ import {
   updateChannel,
   deleteChannel,
   batchAddChannels,
-  deleteChannelsByPlaylistId
+  deleteChannelsByPlaylistId,
+  getSupabase
 } from './src/lib/db';
 
 const app = express();
@@ -228,7 +232,15 @@ function parseM3U(m3uContent: string, playlistId: string, settings: SiteSettings
       if (currentChannel.name) {
         // Automatically categorize channel group and isFifa
         const classification = autoCategorize(currentChannel.name, currentChannel.originalGroup || '', fifaKeywords);
-        currentChannel.group = classification.group;
+        
+        let finalGroup = 'Other TV Channel';
+        if (currentChannel.originalGroup && currentChannel.originalGroup !== 'Uncategorized' && currentChannel.originalGroup.trim() !== '') {
+          finalGroup = currentChannel.originalGroup.trim();
+        } else {
+          finalGroup = classification.group;
+        }
+        
+        currentChannel.group = finalGroup;
         currentChannel.isFifa = classification.isFifa;
         currentChannel.url = line;
         currentChannel.id = `ch-${playlistId}-${Math.random().toString(36).substring(2, 11)}`;
@@ -316,6 +328,9 @@ app.post('/api/playlists', async (req, res) => {
     await addPlaylist(newPlaylist);
     await batchAddChannels(importedChannels);
 
+    // Auto-register any new categories found in the imported playlist
+    registerCategoriesFromChannels(importedChannels);
+
     res.json({ playlist: newPlaylist, importedCount: importedChannels.length });
   } catch (error: any) {
     console.error('Import error:', error);
@@ -357,12 +372,14 @@ app.post('/api/channels', async (req, res) => {
     const fifaKeywords = (settings?.fifaKeywords || '').split(',').map((k: string) => k.trim().toLowerCase()).filter(Boolean);
     const classification = autoCategorize(name, group || '', fifaKeywords);
 
+    const finalGroup = group && group.trim() !== '' ? group.trim() : classification.group;
+
     const newChannel: Channel = {
       id: `ch-manual-${Math.random().toString(36).substring(2, 11)}`,
       name,
       url,
       logo: logo || 'https://images.unsplash.com/photo-1542204172-e7052809a1a1?w=150', // placeholder TV
-      group: classification.group,
+      group: finalGroup,
       isFeatured: !!isFeatured,
       isFifa: classification.isFifa,
       score: Math.floor(Math.random() * 20) + 5,
@@ -371,6 +388,7 @@ app.post('/api/channels', async (req, res) => {
     };
 
     await addChannel(newChannel);
+    registerCategoriesFromChannels([newChannel]);
     res.json(newChannel);
   } catch (error: any) {
     res.status(500).json({ error: error.message || 'Failed to add channel' });
@@ -391,11 +409,12 @@ app.put('/api/channels/:id', async (req, res) => {
       const fifaKeywords = (settings?.fifaKeywords || '').split(',').map((k: string) => k.trim().toLowerCase()).filter(Boolean);
       const classification = autoCategorize(activeName, activeGroup, fifaKeywords);
       
-      updatedFields.group = classification.group;
+      updatedFields.group = activeGroup && activeGroup.trim() !== '' ? activeGroup.trim() : classification.group;
       updatedFields.isFifa = classification.isFifa;
     }
 
     const updated = await updateChannel(id, updatedFields);
+    registerCategoriesFromChannels([updated]);
     res.json(updated);
   } catch (error: any) {
     res.status(500).json({ error: error.message || 'Failed to update channel' });
@@ -410,6 +429,126 @@ app.delete('/api/channels/:id', async (req, res) => {
     res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ error: error.message || 'Failed to delete channel' });
+  }
+});
+
+// Categories JSON persistence
+const CATEGORIES_FILE = path.join(process.cwd(), 'data-categories.json');
+
+function readCategories(): any[] {
+  try {
+    if (fs.existsSync(CATEGORIES_FILE)) {
+      return JSON.parse(fs.readFileSync(CATEGORIES_FILE, 'utf8'));
+    }
+  } catch (e) {
+    console.error('Error reading categories file:', e);
+  }
+  return [];
+}
+
+function writeCategories(categories: any[]) {
+  try {
+    fs.writeFileSync(CATEGORIES_FILE, JSON.stringify(categories, null, 2), 'utf8');
+  } catch (e) {
+    console.error('Error writing categories file:', e);
+  }
+}
+
+// Automatically register missing categories from a list of channels
+function registerCategoriesFromChannels(channels: Channel[]) {
+  try {
+    const existingCategories = readCategories();
+    let updated = false;
+
+    for (const channel of channels) {
+      if (channel.group && typeof channel.group === 'string' && channel.group.trim()) {
+        const groupName = channel.group.trim();
+        const exists = existingCategories.some(
+          (c: any) => c.name.toLowerCase() === groupName.toLowerCase()
+        );
+        if (!exists) {
+          const newCategory = {
+            id: `cat-${Math.random().toString(36).substring(2, 11)}`,
+            name: groupName,
+            isStarred: false,
+            createdAt: new Date().toISOString()
+          };
+          existingCategories.push(newCategory);
+          updated = true;
+        }
+      }
+    }
+
+    if (updated) {
+      writeCategories(existingCategories);
+    }
+  } catch (error) {
+    console.error('Failed to auto-register categories:', error);
+  }
+}
+
+// Categories endpoints
+app.get('/api/categories', (req, res) => {
+  try {
+    const categories = readCategories();
+    res.json(categories);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to get categories' });
+  }
+});
+
+app.post('/api/categories', (req, res) => {
+  try {
+    const { name, isStarred } = req.body;
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ error: 'Category Name is required' });
+    }
+    const categories = readCategories();
+    const newCategory = {
+      id: `cat-${Math.random().toString(36).substring(2, 11)}`,
+      name: name.trim(),
+      isStarred: !!isStarred,
+      createdAt: new Date().toISOString()
+    };
+    categories.push(newCategory);
+    writeCategories(categories);
+    res.json(newCategory);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to create category' });
+  }
+});
+
+app.put('/api/categories/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, isStarred } = req.body;
+    const categories = readCategories();
+    const idx = categories.findIndex(c => c.id === id);
+    if (idx === -1) {
+      return res.status(404).json({ error: 'Category not found' });
+    }
+    if (name !== undefined && typeof name === 'string' && name.trim()) {
+      categories[idx].name = name.trim();
+    }
+    if (isStarred !== undefined) {
+      categories[idx].isStarred = !!isStarred;
+    }
+    writeCategories(categories);
+    res.json(categories[idx]);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to update category' });
+  }
+});
+
+app.delete('/api/categories/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const categories = readCategories();
+    const filtered = categories.filter(c => c.id !== id);
+    writeCategories(filtered);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to delete category' });
   }
 });
 
@@ -532,6 +671,144 @@ app.post('/api/channels/scan', async (req, res) => {
   }
 });
 
+// Upload endpoint for channel logos and homepage banners
+app.post('/api/upload', async (req, res) => {
+  try {
+    const { fileData, fileName, mimeType } = req.body;
+    if (!fileData || !fileName) {
+      return res.status(400).json({ error: 'fileData and fileName are required' });
+    }
+
+    const supabase = getSupabase();
+    if (!supabase) {
+      return res.status(500).json({ error: 'Supabase client is not configured on the server' });
+    }
+
+    // Convert base64 data to buffer
+    const base64Data = fileData.replace(/^data:image\/\w+;base64,/, '');
+    const buffer = Buffer.from(base64Data, 'base64');
+    const cleanMimeType = mimeType || 'image/png';
+
+    // 1. Ensure the bucket "iptv-media" exists
+    try {
+      await supabase.storage.createBucket('iptv-media', {
+        public: true,
+        allowedMimeTypes: ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml'],
+      });
+    } catch (bucketErr) {
+      // Bucket might already exist, ignore error
+    }
+
+    // 2. Upload to Supabase Storage
+    const cleanFileName = fileName.replace(/[^a-zA-Z0-9_.-]/g, '_');
+    const filePath = `uploads/${Date.now()}_${cleanFileName}`;
+    const { data, error: uploadError } = await supabase.storage
+      .from('iptv-media')
+      .upload(filePath, buffer, {
+        contentType: cleanMimeType,
+        upsert: true
+      });
+
+    if (uploadError) {
+      throw uploadError;
+    }
+
+    // 3. Get public URL
+    const { data: publicUrlData } = supabase.storage
+      .from('iptv-media')
+      .getPublicUrl(filePath);
+
+    res.json({ url: publicUrlData.publicUrl });
+  } catch (error: any) {
+    console.error('Upload error:', error);
+    res.status(500).json({ error: error.message || 'Failed to upload file to Supabase Storage' });
+  }
+});
+
+// Helper to perform robust HTTP/HTTPS requests with redirect following, SSL bypass, and timeout
+interface ProxyResponse {
+  statusCode: number;
+  headers: http.IncomingHttpHeaders;
+  data: Buffer;
+}
+
+function robustRequest(targetUrl: string, options: { maxRedirects?: number; timeout?: number } = {}): Promise<ProxyResponse> {
+  const { maxRedirects = 5, timeout = 12000 } = options;
+  
+  return new Promise((resolve, reject) => {
+    let redirectCount = 0;
+    
+    function makeRequest(currentUrl: string) {
+      try {
+        const parsedUrl = new URL(currentUrl);
+        const isHttps = parsedUrl.protocol === 'https:';
+        const lib = isHttps ? https : http;
+        
+        const reqOptions: http.RequestOptions = {
+          method: 'GET',
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': '*/*',
+            'Connection': 'keep-alive',
+          },
+          timeout: timeout,
+        };
+        
+        if (isHttps) {
+          reqOptions.agent = new https.Agent({ rejectUnauthorized: false });
+        }
+        
+        const req = lib.request(currentUrl, reqOptions, (res) => {
+          // Handle redirects
+          if ([301, 302, 303, 307, 308].includes(res.statusCode || 0) && res.headers.location) {
+            if (redirectCount >= maxRedirects) {
+              reject(new Error(`Too many redirects (max: ${maxRedirects})`));
+              return;
+            }
+            redirectCount++;
+            let redirectUrl = res.headers.location;
+            try {
+              redirectUrl = new URL(redirectUrl, currentUrl).href;
+            } catch (e) {
+              // Ignore invalid url resolution
+            }
+            makeRequest(redirectUrl);
+            return;
+          }
+          
+          const chunks: Buffer[] = [];
+          res.on('data', (chunk) => {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+          });
+          
+          res.on('end', () => {
+            resolve({
+              statusCode: res.statusCode || 200,
+              headers: res.headers,
+              data: Buffer.concat(chunks),
+            });
+          });
+        });
+        
+        req.on('error', (err) => {
+          reject(err);
+        });
+        
+        req.on('timeout', () => {
+          req.destroy();
+          reject(new Error(`Connection timed out after ${timeout}ms`));
+        });
+        
+        req.end();
+      } catch (err) {
+        reject(err);
+      }
+    }
+    
+    makeRequest(targetUrl);
+  });
+}
+
 // Proxy to fetch external URLs bypassing CORS
 app.get('/api/proxy-m3u', async (req, res) => {
   const { url } = req.query;
@@ -540,21 +817,182 @@ app.get('/api/proxy-m3u', async (req, res) => {
   }
 
   try {
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': '*/*'
-      }
-    });
-    if (!response.ok) {
-      return res.status(response.status).json({ error: 'Failed to fetch M3U' });
+    const proxyRes = await robustRequest(url);
+    if (proxyRes.statusCode >= 400) {
+      return res.status(proxyRes.statusCode).json({ error: `Upstream error: ${proxyRes.statusCode}` });
     }
-    const text = await response.text();
     res.setHeader('Content-Type', 'text/plain');
-    res.send(text);
+    res.send(proxyRes.data.toString('utf8'));
   } catch (error: any) {
-    res.status(500).json({ error: error.message || 'Failed to proxy' });
+    res.status(500).json({ error: error.message || 'Failed to proxy M3U' });
   }
+});
+
+// Proxy live stream chunks and playlists (CORS and mixed content bypass)
+app.get('/api/proxy-stream', (req, res) => {
+  const { url } = req.query;
+  if (!url || typeof url !== 'string') {
+    return res.status(400).send('URL is required');
+  }
+
+  let redirectCount = 0;
+  const maxRedirects = 5;
+  const timeout = 15000;
+
+  function makeRequest(currentUrl: string) {
+    try {
+      const parsedUrl = new URL(currentUrl);
+      const isHttps = parsedUrl.protocol === 'https:';
+      const lib = isHttps ? https : http;
+
+      const reqOptions: http.RequestOptions = {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': '*/*',
+          'Connection': 'keep-alive',
+        },
+        timeout: timeout,
+      };
+
+      if (isHttps) {
+        reqOptions.agent = new https.Agent({ rejectUnauthorized: false });
+      }
+
+      const upstreamReq = lib.request(currentUrl, reqOptions, (upstreamRes) => {
+        // Handle redirects
+        if ([301, 302, 303, 307, 308].includes(upstreamRes.statusCode || 0) && upstreamRes.headers.location) {
+          if (redirectCount >= maxRedirects) {
+            return res.status(500).send('Too many redirects');
+          }
+          redirectCount++;
+          let redirectUrl = upstreamRes.headers.location;
+          try {
+            redirectUrl = new URL(redirectUrl, currentUrl).href;
+          } catch (e) {
+            // Ignore invalid url resolution
+          }
+          makeRequest(redirectUrl);
+          return;
+        }
+
+        const statusCode = upstreamRes.statusCode || 200;
+        if (statusCode >= 400) {
+          return res.status(statusCode).send(`Failed to fetch from upstream: Code ${statusCode}`);
+        }
+
+        const contentType = (upstreamRes.headers['content-type'] || '').toLowerCase();
+        
+        // Check if it's an M3U8/M3U playlist
+        const isPlaylist = 
+          contentType.includes('mpegurl') || 
+          contentType.includes('application/x-mpegurl') ||
+          contentType.includes('application/vnd.apple.mpegurl') ||
+          currentUrl.includes('.m3u8') || 
+          currentUrl.includes('.m3u');
+
+        if (isPlaylist) {
+          const chunks: Buffer[] = [];
+          upstreamRes.on('data', (chunk) => {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+          });
+          
+          upstreamRes.on('end', () => {
+            try {
+              const text = Buffer.concat(chunks).toString('utf8');
+              const lines = text.split('\n');
+              
+              const rewrittenLines = lines.map(line => {
+                const trimmed = line.trim();
+                if (!trimmed) return line;
+                
+                // Rewrite URI attributes in tags (e.g., #EXT-X-KEY, #EXT-X-MEDIA)
+                if (trimmed.startsWith('#')) {
+                  return trimmed.replace(/(URI\s*=\s*["'])([^"']*)(["'])/gi, (match, p1, p2, p3) => {
+                    try {
+                      const absoluteUrl = new URL(p2, currentUrl).href;
+                      return `${p1}/api/proxy-stream?url=${encodeURIComponent(absoluteUrl)}${p3}`;
+                    } catch (e) {
+                      return match;
+                    }
+                  });
+                }
+                
+                // Rewrite stream segments or playlists URLs
+                try {
+                  const absoluteUrl = new URL(trimmed, currentUrl).href;
+                  return `/api/proxy-stream?url=${encodeURIComponent(absoluteUrl)}`;
+                } catch (e) {
+                  return line;
+                }
+              });
+              
+              res.setHeader('Content-Type', 'application/x-mpegURL');
+              res.setHeader('Access-Control-Allow-Origin', '*');
+              res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+              res.send(rewrittenLines.join('\n'));
+            } catch (err: any) {
+              console.error('Error rewriting playlist:', err);
+              if (!res.headersSent) {
+                res.status(500).send(`Error processing playlist: ${err.message}`);
+              }
+            }
+          });
+
+          upstreamRes.on('error', (err) => {
+            console.error('Upstream playlist stream error:', err);
+            if (!res.headersSent) {
+              res.status(500).send(`Playlist fetch error: ${err.message}`);
+            }
+          });
+        } else {
+          // It's a video segment, audio file, or direct infinite live stream. Pipe it directly!
+          res.setHeader('Content-Type', upstreamRes.headers['content-type'] || 'video/mp2t');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          if (upstreamRes.headers['content-length']) {
+            res.setHeader('Content-Length', upstreamRes.headers['content-length']);
+          }
+          
+          if (currentUrl.includes('.ts') || contentType.includes('video/')) {
+            res.setHeader('Cache-Control', 'public, max-age=3600');
+          } else {
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+          }
+
+          res.status(statusCode);
+          upstreamRes.pipe(res);
+
+          // Handle client disconnect gracefully to abort upstream request and avoid memory/socket leak
+          req.on('close', () => {
+            upstreamReq.destroy();
+          });
+        }
+      });
+
+      upstreamReq.on('error', (err) => {
+        console.error('Proxy stream request error:', err);
+        if (!res.headersSent) {
+          res.status(500).send(`Stream proxy error: ${err.message}`);
+        }
+      });
+
+      upstreamReq.on('timeout', () => {
+        upstreamReq.destroy();
+        if (!res.headersSent) {
+          res.status(504).send(`Proxy stream timeout: Gateway Timeout`);
+        }
+      });
+
+      upstreamReq.end();
+    } catch (err: any) {
+      console.error('Proxy stream handler error:', err);
+      if (!res.headersSent) {
+        res.status(500).send(`Stream proxy error: ${err.message}`);
+      }
+    }
+  }
+
+  makeRequest(url);
 });
 
 // Proxy to fetch external logos bypassing CORS

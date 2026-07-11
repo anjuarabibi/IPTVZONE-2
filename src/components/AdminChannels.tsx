@@ -209,6 +209,8 @@ export default function AdminChannels({
   const [logo, setLogo] = useState('');
   const [group, setGroup] = useState('');
   const [isFeatured, setIsFeatured] = useState(false);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   // Edit Mode State
   const [editingChannel, setEditingChannel] = useState<Channel | null>(null);
@@ -507,14 +509,65 @@ export default function AdminChannels({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="font-sans text-xs font-semibold text-neutral-300">Logo Image URL (Optional)</label>
-            <input
-              type="url"
-              placeholder="https://example.com/logo.png"
-              value={logo}
-              onChange={(e) => setLogo(e.target.value)}
-              className="px-4 py-2 rounded-xl bg-neutral-950 border border-neutral-800 focus:border-rose-500 focus:outline-none font-sans text-xs text-white"
-            />
+            <label className="font-sans text-xs font-semibold text-neutral-300">Logo Image URL or Upload</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="https://example.com/logo.png"
+                value={logo}
+                onChange={(e) => setLogo(e.target.value)}
+                className="flex-grow px-4 py-2 rounded-xl bg-neutral-950 border border-neutral-800 focus:border-rose-500 focus:outline-none font-sans text-xs text-white"
+              />
+              <div className="relative">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setIsUploadingLogo(true);
+                    setUploadError(null);
+                    try {
+                      const reader = new FileReader();
+                      reader.readAsDataURL(file);
+                      reader.onload = async () => {
+                        const base64 = reader.result as string;
+                        const response = await fetch('/api/upload', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            fileData: base64,
+                            fileName: file.name,
+                            mimeType: file.type
+                          })
+                        });
+                        const data = await response.json();
+                        if (response.ok && data.url) {
+                          setLogo(data.url);
+                        } else {
+                          throw new Error(data.error || 'Upload failed');
+                        }
+                      };
+                    } catch (err: any) {
+                      setUploadError(err.message || 'Logo upload failed');
+                    } finally {
+                      setIsUploadingLogo(false);
+                    }
+                  }}
+                  className="hidden"
+                  id="logo-file-upload"
+                />
+                <label
+                  htmlFor="logo-file-upload"
+                  className="px-4 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-sans text-xs font-bold transition-all cursor-pointer inline-flex items-center justify-center border border-neutral-700 h-full whitespace-nowrap"
+                >
+                  {isUploadingLogo ? 'Uploading...' : 'Upload'}
+                </label>
+              </div>
+            </div>
+            {uploadError && (
+              <span className="font-sans text-[10px] text-rose-500">{uploadError}</span>
+            )}
           </div>
 
           <div className="flex flex-col gap-1.5">

@@ -237,10 +237,17 @@ export default function AdminPlaylists({
             // Automatically categorize channel group and isFifa
             const classification = autoCategorize(chName, group, fifaKeywords);
             
+            let finalGroup = 'Other TV Channel';
+            if (group && group !== 'Uncategorized' && group.trim() !== '') {
+              finalGroup = group.trim();
+            } else {
+              finalGroup = classification.group;
+            }
+            
             currentChannel = {
               name: chName,
               logo,
-              group: classification.group,
+              group: finalGroup,
               originalGroup: group,
               isFifa: classification.isFifa,
               isFeatured: false,

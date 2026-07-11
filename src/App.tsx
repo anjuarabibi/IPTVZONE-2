@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Channel, Playlist, SiteSettings, ActiveTab, AdminSubTab } from './types';
+import { Channel, Playlist, SiteSettings, ActiveTab, AdminSubTab, Category } from './types';
 import Header from './components/Header';
 import Hero from './components/Hero';
 import VideoPlayer from './components/VideoPlayer';
@@ -7,7 +7,8 @@ import ChannelList from './components/ChannelList';
 import AdminPlaylists from './components/AdminPlaylists';
 import AdminChannels from './components/AdminChannels';
 import AdminSettings from './components/AdminSettings';
-import { Tv, ListVideo, Settings, SlidersHorizontal, Trophy, Star, ShieldAlert, MonitorPlay, LogIn, LogOut, ArrowRight, Activity } from 'lucide-react';
+import AdminCategories from './components/AdminCategories';
+import { Tv, ListVideo, Settings, SlidersHorizontal, Trophy, Star, ShieldAlert, MonitorPlay, LogIn, LogOut, ArrowRight, Activity, Tag } from 'lucide-react';
 import { getChannelLogo } from './utils/logoResolver';
 
 const LOCAL_STORAGE_KEY_PREFIX = 'iptv_zone_';
@@ -133,6 +134,7 @@ export default function App() {
   // Core Data State
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [settings, setSettings] = useState<SiteSettings>(DEFAULT_SETTINGS);
   const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
 
@@ -143,62 +145,43 @@ export default function App() {
   const [passwordInput, setPasswordInput] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
 
-  // 1. Initial State Check (Full-Stack vs Client Local-Storage)
+  // 1. Initial State Check (Production Supabase Only)
   useEffect(() => {
     const initializeApp = async () => {
       setIsLoading(true);
       try {
-        // Attempt to contact full-stack backend
+        setIsBackendAvailable(true);
         const settingsRes = await fetch('/api/settings');
-        if (settingsRes.ok) {
-          setIsBackendAvailable(true);
-          
-          // Fetch backend data
-          const [settingsData, playlistsRes, channelsRes] = await Promise.all([
-            settingsRes.json(),
-            fetch('/api/playlists').then(r => r.json()),
-            fetch('/api/channels').then(r => r.json())
-          ]);
+        if (!settingsRes.ok) {
+          throw new Error('Failed to load settings');
+        }
+        const settingsData = await settingsRes.json();
+        setSettings(settingsData);
 
-          setSettings(settingsData);
-          setPlaylists(playlistsRes);
-          setChannels(channelsRes);
+        const [playlistsRes, channelsRes, categoriesRes] = await Promise.all([
+          fetch('/api/playlists').then(r => {
+            if (!r.ok) throw new Error('Failed to load playlists');
+            return r.json();
+          }),
+          fetch('/api/channels').then(r => {
+            if (!r.ok) throw new Error('Failed to load channels');
+            return r.json();
+          }),
+          fetch('/api/categories').then(r => {
+            if (!r.ok) throw new Error('Failed to load categories');
+            return r.json();
+          }).catch(() => [])
+        ]);
 
-          // Select first sample channel as active by default if there are any
-          if (channelsRes.length > 0) {
-            setActiveChannel(channelsRes[0]);
-          }
-        } else {
-          throw new Error('Backend offline');
+        setPlaylists(playlistsRes);
+        setChannels(channelsRes);
+        setCategories(categoriesRes);
+
+        if (channelsRes.length > 0) {
+          setActiveChannel(channelsRes[0]);
         }
       } catch (error) {
-        console.log('Using client-side localStorage fallback mode (Vercel compatible)');
-        setIsBackendAvailable(false);
-
-        // Load local storage fallback
-        const localSettings = localStorage.getItem(LOCAL_STORAGE_KEY_PREFIX + 'settings');
-        const localPlaylists = localStorage.getItem(LOCAL_STORAGE_KEY_PREFIX + 'playlists');
-        const localChannels = localStorage.getItem(LOCAL_STORAGE_KEY_PREFIX + 'channels');
-
-        if (localSettings) {
-          setSettings(JSON.parse(localSettings));
-        } else {
-          localStorage.setItem(LOCAL_STORAGE_KEY_PREFIX + 'settings', JSON.stringify(DEFAULT_SETTINGS));
-        }
-
-        if (localPlaylists) {
-          setPlaylists(JSON.parse(localPlaylists));
-        }
-
-        if (localChannels) {
-          const parsed = JSON.parse(localChannels);
-          setChannels(parsed);
-          if (parsed.length > 0) setActiveChannel(parsed[0]);
-        } else {
-          setChannels(DEFAULT_CHANNELS);
-          setActiveChannel(DEFAULT_CHANNELS[0]);
-          localStorage.setItem(LOCAL_STORAGE_KEY_PREFIX + 'channels', JSON.stringify(DEFAULT_CHANNELS));
-        }
+        console.error('Initialization error:', error);
       } finally {
         setIsLoading(false);
       }
@@ -215,8 +198,6 @@ export default function App() {
   // Handle active channel selections
   const handleSelectChannel = (channel: Channel) => {
     setActiveChannel(channel);
-    // Automatically switch or highlight video tab if the user wants dedicated view,
-    // otherwise, the sticky sidebar/header player will play!
   };
 
   // Sync Favorite status (Featured/Star toggle from user page)
@@ -231,21 +212,18 @@ export default function App() {
     });
 
     setChannels(updatedChannels);
-    if (!isBackendAvailable) {
-      localStorage.setItem(LOCAL_STORAGE_KEY_PREFIX + 'channels', JSON.stringify(updatedChannels));
-    } else {
-      // Sync change with full-stack server backend
-      const target = updatedChannels.find(c => c.id === channelId);
-      if (target) {
-        try {
-          await fetch(`/api/channels/${channelId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ isFeatured: target.isFeatured, starredAt: target.starredAt, score: target.score })
-          });
-        } catch (e) {
-          console.error('Failed to sync favorite on backend:', e);
-        }
+    
+    // Sync change with full-stack server backend
+    const target = updatedChannels.find(c => c.id === channelId);
+    if (target) {
+      try {
+        await fetch(`/api/channels/${channelId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isFeatured: target.isFeatured, starredAt: target.starredAt, score: target.score })
+        });
+      } catch (e) {
+        console.error('Failed to sync favorite on backend:', e);
       }
     }
 
@@ -262,93 +240,70 @@ export default function App() {
 
   // Admin Actions: ADD PLAYLIST (M3U Parser calls this)
   const handleAddPlaylist = (newPlaylist: Playlist, importedChannels: Channel[]) => {
-    if (isBackendAvailable) {
-      // Full stack: Server did the heavy lifting, we simply fetch the fresh states!
-      const reloadData = async () => {
-        const [plRes, chRes] = await Promise.all([
-          fetch('/api/playlists').then(r => r.json()),
-          fetch('/api/channels').then(r => r.json())
-        ]);
-        setPlaylists(plRes);
-        setChannels(chRes);
-      };
-      reloadData();
-    } else {
-      // Client local storage mode
-      const updatedPlaylists = [...playlists, newPlaylist];
-      const updatedChannels = [...channels, ...importedChannels];
-
-      setPlaylists(updatedPlaylists);
-      setChannels(updatedChannels);
-
-      localStorage.setItem(LOCAL_STORAGE_KEY_PREFIX + 'playlists', JSON.stringify(updatedPlaylists));
-      localStorage.setItem(LOCAL_STORAGE_KEY_PREFIX + 'channels', JSON.stringify(updatedChannels));
-    }
+    // Full stack: Server did the heavy lifting, we simply fetch the fresh states!
+    const reloadData = async () => {
+      const [plRes, chRes, catRes] = await Promise.all([
+        fetch('/api/playlists').then(r => r.json()),
+        fetch('/api/channels').then(r => r.json()),
+        fetch('/api/categories').then(r => r.json()).catch(() => [])
+      ]);
+      setPlaylists(plRes);
+      setChannels(chRes);
+      setCategories(catRes);
+    };
+    reloadData();
   };
 
   // Admin Actions: DELETE PLAYLIST
   const handleDeletePlaylist = async (id: string) => {
-    if (isBackendAvailable) {
-      try {
-        await fetch(`/api/playlists/${id}`, { method: 'DELETE' });
-        const plRes = await fetch('/api/playlists').then(r => r.json());
-        const chRes = await fetch('/api/channels').then(r => r.json());
-        setPlaylists(plRes);
-        setChannels(chRes);
-      } catch (e) {
-        console.error(e);
-      }
-    } else {
-      const updatedPlaylists = playlists.filter(p => p.id !== id);
-      const updatedChannels = channels.filter(c => c.playlistId !== id);
-
-      setPlaylists(updatedPlaylists);
-      setChannels(updatedChannels);
-
-      localStorage.setItem(LOCAL_STORAGE_KEY_PREFIX + 'playlists', JSON.stringify(updatedPlaylists));
-      localStorage.setItem(LOCAL_STORAGE_KEY_PREFIX + 'channels', JSON.stringify(updatedChannels));
+    try {
+      await fetch(`/api/playlists/${id}`, { method: 'DELETE' });
+      const [plRes, chRes, catRes] = await Promise.all([
+        fetch('/api/playlists').then(r => r.json()),
+        fetch('/api/channels').then(r => r.json()),
+        fetch('/api/categories').then(r => r.json()).catch(() => [])
+      ]);
+      setPlaylists(plRes);
+      setChannels(chRes);
+      setCategories(catRes);
+    } catch (e) {
+      console.error(e);
     }
   };
 
   // Admin Actions: ADD SINGLE CHANNEL
   const handleAddChannel = async (newChannel: Channel) => {
-    if (isBackendAvailable) {
-      try {
-        const res = await fetch('/api/channels', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newChannel)
-        });
-        const saved = await res.json();
-        setChannels(prev => [...prev, saved]);
-      } catch (e) {
-        console.error(e);
-      }
-    } else {
-      const updated = [...channels, newChannel];
-      setChannels(updated);
-      localStorage.setItem(LOCAL_STORAGE_KEY_PREFIX + 'channels', JSON.stringify(updated));
+    try {
+      const res = await fetch('/api/channels', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newChannel)
+      });
+      const saved = await res.json();
+      setChannels(prev => [...prev, saved]);
+
+      const catRes = await fetch('/api/categories').then(r => r.json()).catch(() => []);
+      setCategories(catRes);
+    } catch (e) {
+      console.error(e);
     }
   };
 
   // Admin Actions: EDIT CHANNEL
   const handleEditChannel = async (updatedChannel: Channel) => {
-    if (isBackendAvailable) {
-      try {
-        const res = await fetch(`/api/channels/${updatedChannel.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updatedChannel)
-        });
-        const saved = await res.json();
-        setChannels(prev => prev.map(c => c.id === saved.id ? saved : c));
-      } catch (e) {
-        console.error(e);
-      }
-    } else {
-      const updated = channels.map(c => c.id === updatedChannel.id ? updatedChannel : c);
-      setChannels(updated);
-      localStorage.setItem(LOCAL_STORAGE_KEY_PREFIX + 'channels', JSON.stringify(updated));
+    try {
+      const res = await fetch(`/api/channels/${updatedChannel.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedChannel)
+      });
+      const saved = await res.json();
+      setChannels(prev => prev.map(c => c.id === saved.id ? saved : c));
+
+      const catRes = await fetch('/api/categories').then(r => r.json()).catch(() => []);
+      setCategories(catRes);
+    } catch (e) {
+      console.error(e);
     }
 
     if (activeChannel?.id === updatedChannel.id) {
@@ -358,17 +313,11 @@ export default function App() {
 
   // Admin Actions: DELETE CHANNEL
   const handleDeleteChannel = async (id: string) => {
-    if (isBackendAvailable) {
-      try {
-        await fetch(`/api/channels/${id}`, { method: 'DELETE' });
-        setChannels(prev => prev.filter(c => c.id !== id));
-      } catch (e) {
-        console.error(e);
-      }
-    } else {
-      const updated = channels.filter(c => c.id !== id);
-      setChannels(updated);
-      localStorage.setItem(LOCAL_STORAGE_KEY_PREFIX + 'channels', JSON.stringify(updated));
+    try {
+      await fetch(`/api/channels/${id}`, { method: 'DELETE' });
+      setChannels(prev => prev.filter(c => c.id !== id));
+    } catch (e) {
+      console.error(e);
     }
 
     if (activeChannel?.id === id) {
@@ -379,8 +328,51 @@ export default function App() {
   // Admin Actions: BULK VERIFICATION / CLEAN SCAN UPDATES
   const handleBulkUpdateChannels = (updatedList: Channel[]) => {
     setChannels(updatedList);
-    if (!isBackendAvailable) {
-      localStorage.setItem(LOCAL_STORAGE_KEY_PREFIX + 'channels', JSON.stringify(updatedList));
+  };
+
+  // Admin Actions: CATEGORIES
+  const handleAddCategory = async (name: string, isStarred: boolean) => {
+    try {
+      const response = await fetch('/api/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, isStarred })
+      });
+      if (response.ok) {
+        const newCat = await response.json();
+        setCategories(prev => [...prev, newCat]);
+      }
+    } catch (e) {
+      console.error('Failed to add category:', e);
+    }
+  };
+
+  const handleUpdateCategory = async (id: string, name?: string, isStarred?: boolean) => {
+    try {
+      const response = await fetch(`/api/categories/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, isStarred })
+      });
+      if (response.ok) {
+        const updatedCat = await response.json();
+        setCategories(prev => prev.map(c => c.id === id ? updatedCat : c));
+      }
+    } catch (e) {
+      console.error('Failed to update category:', e);
+    }
+  };
+
+  const handleDeleteCategory = async (id: string) => {
+    try {
+      const response = await fetch(`/api/categories/${id}`, {
+        method: 'DELETE'
+      });
+      if (response.ok) {
+        setCategories(prev => prev.filter(c => c.id !== id));
+      }
+    } catch (e) {
+      console.error('Failed to delete category:', e);
     }
   };
 
@@ -388,18 +380,14 @@ export default function App() {
   const handleSaveSettings = async (updatedSettings: SiteSettings) => {
     setSettings(updatedSettings);
 
-    if (isBackendAvailable) {
-      try {
-        await fetch('/api/settings', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updatedSettings)
-        });
-      } catch (e) {
-        console.error(e);
-      }
-    } else {
-      localStorage.setItem(LOCAL_STORAGE_KEY_PREFIX + 'settings', JSON.stringify(updatedSettings));
+    try {
+      await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedSettings)
+      });
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -434,18 +422,14 @@ export default function App() {
       handleDeleteChannel(channelId);
     } else {
       // Mark as dead in database
-      if (isBackendAvailable) {
-        try {
-          await fetch(`/api/channels/${channelId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ isDead: true })
-          });
-        } catch (e) {
-          console.error(e);
-        }
-      } else {
-        localStorage.setItem(LOCAL_STORAGE_KEY_PREFIX + 'channels', JSON.stringify(updated));
+      try {
+        await fetch(`/api/channels/${channelId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isDead: true })
+        });
+      } catch (e) {
+        console.error(e);
       }
     }
   };
@@ -501,6 +485,7 @@ export default function App() {
               <div className="lg:col-span-2">
                 <ChannelList
                   channels={channels}
+                  categories={categories}
                   activeChannel={activeChannel}
                   onSelectChannel={handleSelectChannel}
                   onToggleFavorite={handleToggleFavorite}
@@ -534,6 +519,7 @@ export default function App() {
               <div className="lg:col-span-2">
                 <ChannelList
                   channels={channels}
+                  categories={categories}
                   activeChannel={activeChannel}
                   onSelectChannel={handleSelectChannel}
                   onToggleFavorite={handleToggleFavorite}
@@ -653,6 +639,7 @@ export default function App() {
                   {[
                     { id: 'playlists' as AdminSubTab, label: 'Playlists', icon: ListVideo },
                     { id: 'channels' as AdminSubTab, label: 'Channels', icon: Tv },
+                    { id: 'categories' as AdminSubTab, label: 'Categories', icon: Tag },
                     { id: 'settings' as AdminSubTab, label: 'Settings', icon: Settings },
                   ].map((sub) => {
                     const SubIcon = sub.icon;
@@ -693,6 +680,15 @@ export default function App() {
                     onDeleteChannel={handleDeleteChannel}
                     onBulkUpdateChannels={handleBulkUpdateChannels}
                     isBackendAvailable={isBackendAvailable}
+                  />
+                )}
+
+                {adminSubTab === 'categories' && (
+                  <AdminCategories
+                    categories={categories}
+                    onAddCategory={handleAddCategory}
+                    onUpdateCategory={handleUpdateCategory}
+                    onDeleteCategory={handleDeleteCategory}
                   />
                 )}
 
