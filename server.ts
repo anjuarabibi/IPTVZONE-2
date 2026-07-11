@@ -292,49 +292,145 @@ app.post('/api/playlists', async (req, res) => {
   try {
     const { name, url } = req.body;
     if (!name || !url) {
-      return res.status(400).json({ error: 'Name and URL are required' });
+      return res.status(400).json({ error: 'Playlist Name and Stream URL are required' });
     }
 
-    // Fetch the playlist content (CORS free server side fetch with browser UA)
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36',
-        'Accept': '*/*'
+    let targetUrl = url;
+    if (typeof targetUrl === 'string') {
+      targetUrl = targetUrl.trim();
+      try {
+        const parsed = new URL(targetUrl);
+        if (parsed.hostname === 'github.com' && parsed.pathname.includes('/blob/')) {
+          targetUrl = targetUrl
+            .replace('github.com', 'raw.githubusercontent.com')
+            .replace('/blob/', '/');
+          console.log(`Auto-converted GitHub page URL to Raw file URL: ${targetUrl}`);
+        }
+      } catch (err) {
+        return res.status(400).json({ error: 'The provided Playlist URL format is invalid. Please ensure it is a valid HTTP or HTTPS URL.' });
       }
-    });
-    if (!response.ok) {
-      throw new Error(`Failed to fetch M3U playlist. Status: ${response.status}`);
+    } else {
+      return res.status(400).json({ error: 'Playlist URL must be a valid string.' });
     }
-    const m3uContent = await response.text();
 
-    const settings = await getSettings();
+    // Verify Supabase Database connection before fetching
+    const supabase = getSupabase();
+    if (!supabase) {
+      console.error('Supabase connection check failed: Client is null. Environment keys missing.');
+      return res.status(500).json({ 
+        error: 'Database connection is not configured. Please ensure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are correctly defined in your Vercel or environment settings.' 
+      });
+    }
+
+    // Fetch the playlist content using our robust redirect-following & SSL-bypassing client
+    let m3uContent = '';
+    try {
+      console.log(`Fetching playlist from: ${targetUrl}`);
+      const proxyRes = await robustRequest(targetUrl, { timeout: 15000 });
+      if (proxyRes.statusCode >= 400) {
+        return res.status(proxyRes.statusCode).json({ 
+          error: `Failed to fetch M3U playlist. Server returned HTTP Status ${proxyRes.statusCode}.` 
+        });
+      }
+      m3uContent = proxyRes.data.toString('utf8');
+    } catch (fetchErr: any) {
+      console.error('Fetch playlist error:', fetchErr);
+      return res.status(500).json({ 
+        error: `Network error: Failed to retrieve playlist from the server. Details: ${fetchErr.message || 'Unknown network error'}` 
+      });
+    }
+
+    if (!m3uContent || !m3uContent.trim()) {
+      return res.status(400).json({ error: 'The retrieved playlist content is empty. Please verify that the URL is active and contains content.' });
+    }
+
+    // Verify we didn't receive HTML (which happens on GitHub repository pages or expired proxies)
+    const trimmedContent = m3uContent.trim();
+    if (trimmedContent.startsWith('<!DOCTYPE') || trimmedContent.startsWith('<html') || trimmedContent.startsWith('<body')) {
+      return res.status(400).json({ 
+        error: 'The provided URL returned an HTML web page instead of a valid plain-text M3U IPTV playlist. If you linked to a file on GitHub, make sure to use the Raw URL.' 
+      });
+    }
+
+    // Load settings for categorization
+    let settings: SiteSettings;
+    try {
+      settings = await getSettings();
+    } catch (dbErr: any) {
+      console.warn('Failed to fetch settings from Supabase, using defaults:', dbErr.message || dbErr);
+      settings = {
+        siteTitle: 'IPTV Zone',
+        bannerUrl: '',
+        bannerTitle: '',
+        bannerSubtitle: '',
+        featuredGroup: '',
+        fifaKeywords: 'fifa, world cup, cup, match, live',
+        autoRemoveDead: true
+      };
+    }
+
     const playlistId = `pl-${Math.random().toString(36).substring(2, 9)}`;
 
-    // Parse the M3U
-    const importedChannels = parseM3U(m3uContent, playlistId, settings);
+    // Parse the M3U content
+    let importedChannels: Channel[] = [];
+    try {
+      importedChannels = parseM3U(m3uContent, playlistId, settings);
+    } catch (parseErr: any) {
+      console.error('Failed to parse M3U playlist:', parseErr);
+      return res.status(400).json({ 
+        error: `M3U Playlist parsing failed: ${parseErr.message || 'Invalid or malformed M3U content'}` 
+      });
+    }
 
     if (importedChannels.length === 0) {
-      return res.status(400).json({ error: 'No valid channels found in this M3U file.' });
+      return res.status(400).json({ 
+        error: 'No valid channels were found in this M3U file. Please check that the file format is valid, starts with "#EXTM3U", and contains properly formatted stream URLs.' 
+      });
     }
 
     const newPlaylist: Playlist = {
       id: playlistId,
       name,
-      url,
+      url: targetUrl,
       createdAt: new Date().toISOString(),
       channelCount: importedChannels.length
     };
 
-    await addPlaylist(newPlaylist);
-    await batchAddChannels(importedChannels);
+    // Save Playlist to DB
+    try {
+      await addPlaylist(newPlaylist);
+    } catch (dbErr: any) {
+      console.error('Supabase save playlist failed:', dbErr);
+      return res.status(500).json({ 
+        error: `Database error: Failed to save the playlist record. Details: ${dbErr.message || dbErr}` 
+      });
+    }
+
+    // Save Channels in batch chunks
+    try {
+      await batchAddChannels(importedChannels);
+    } catch (dbErr: any) {
+      console.error('Supabase batch add channels failed:', dbErr);
+      // Attempt clean up of the created playlist record to prevent orphaned records
+      try {
+        await deletePlaylist(playlistId);
+      } catch (_) {}
+      return res.status(500).json({ 
+        error: `Database error: Failed to save channels into the database. Details: ${dbErr.message || dbErr}` 
+      });
+    }
 
     // Auto-register any new categories found in the imported playlist
-    registerCategoriesFromChannels(importedChannels);
+    try {
+      registerCategoriesFromChannels(importedChannels);
+    } catch (catErr: any) {
+      console.error('Category auto-registration warning:', catErr);
+    }
 
     res.json({ playlist: newPlaylist, importedCount: importedChannels.length });
   } catch (error: any) {
-    console.error('Import error:', error);
-    res.status(500).json({ error: error.message || 'Failed to import playlist' });
+    console.error('Unexpected playlist import crash:', error);
+    res.status(500).json({ error: error.message || 'An unexpected error occurred during playlist import' });
   }
 });
 
@@ -999,7 +1095,7 @@ app.get('/api/proxy-stream', (req, res) => {
 app.get('/api/proxy-logo', async (req, res) => {
   const { url } = req.query;
   if (!url || typeof url !== 'string') {
-    return res.status(400).send('URL is required');
+    return res.status(400).json({ error: 'URL parameter is required and must be a valid string' });
   }
 
   try {
@@ -1016,7 +1112,7 @@ app.get('/api/proxy-logo', async (req, res) => {
     clearTimeout(timeout);
 
     if (!response.ok) {
-      return res.status(404).send('Image not found');
+      return res.status(404).json({ error: 'Image not found on remote server' });
     }
 
     const contentType = response.headers.get('content-type');
@@ -1031,9 +1127,25 @@ app.get('/api/proxy-logo', async (req, res) => {
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     res.send(buffer);
-  } catch (error) {
-    res.status(500).send('Failed to fetch logo');
+  } catch (error: any) {
+    console.error('Proxy-logo error:', error);
+    res.status(500).json({ error: 'Failed to proxy channel logo: ' + (error.message || 'Unknown network error') });
   }
+});
+
+// -----------------------------------------------------------------------------
+// Global Exception Error Handler Middleware
+// -----------------------------------------------------------------------------
+// Catches any uncaught exceptions thrown during request execution and returns structured JSON
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('CRITICAL UNCAUGHT SERVER ERROR:', err);
+  const statusCode = err.statusCode || err.status || 500;
+  res.status(statusCode).json({
+    success: false,
+    error: err.message || 'An unexpected server-side error occurred',
+    code: err.code || 'INTERNAL_SERVER_ERROR',
+    details: process.env.NODE_ENV !== 'production' ? err.stack : undefined
+  });
 });
 
 // -----------------------------------------------------------------------------

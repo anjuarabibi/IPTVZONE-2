@@ -116,7 +116,7 @@ export default function ChannelList({
     <div id="channel-listings" className="w-full flex flex-col gap-6" ref={topRef}>
       
       {/* 1. Header Filter Controls Bar */}
-      <div className="relative z-30 flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-5 bg-gradient-to-r from-neutral-900/60 to-neutral-950/60 backdrop-blur-xl rounded-2xl border border-neutral-800/80 shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
+      <div className="relative z-50 flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-5 bg-gradient-to-r from-neutral-900/60 to-neutral-950/60 backdrop-blur-xl rounded-2xl border border-neutral-800/80 shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
         <div className="flex flex-col gap-1">
           <h3 className="font-sans font-black text-sm text-white flex items-center gap-2">
             <span className="flex items-center justify-center w-5 h-5 rounded-md bg-rose-500/10 border border-rose-500/20 text-rose-500">
@@ -158,10 +158,10 @@ export default function ChannelList({
             {isTopCategoriesDropdownOpen && (
               <>
                 <div 
-                  className="fixed inset-0 z-40" 
+                  className="fixed inset-0 z-[55]" 
                   onClick={() => setIsTopCategoriesDropdownOpen(false)}
                 />
-                <div className="absolute right-0 sm:left-0 top-full mt-2.5 w-72 max-h-80 bg-neutral-950/95 backdrop-blur-xl border border-neutral-850 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.95)] p-2 z-50 overflow-y-auto scrollbar-thin flex flex-col gap-1 animate-fadeIn">
+                <div className="absolute right-0 sm:left-0 top-full mt-2.5 w-72 max-h-80 bg-neutral-950/95 backdrop-blur-xl border border-neutral-850 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.95)] p-2 z-[60] overflow-y-auto scrollbar-thin flex flex-col gap-1 animate-fadeIn">
                   <div className="px-2.5 py-2 text-[9px] font-extrabold text-neutral-500 border-b border-neutral-900/80 mb-1.5 flex items-center justify-between tracking-widest">
                     <span>SELECT CATEGORY (ক্যাটাগরি)</span>
                     <span className="text-[9px] bg-rose-500/10 text-rose-400 px-2 py-0.5 rounded-md font-bold">
