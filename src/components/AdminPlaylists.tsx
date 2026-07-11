@@ -161,6 +161,7 @@ export default function AdminPlaylists({
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
   const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -174,118 +175,190 @@ export default function AdminPlaylists({
     setIsImporting(true);
     setError(null);
     setSuccess(null);
+    setImportProgress('Downloading M3U playlist file...');
 
     try {
+      // 1. Normalize and resolve URL
+      let targetUrl = url.trim();
+      if (targetUrl.includes('github.com') && targetUrl.includes('/blob/')) {
+        targetUrl = targetUrl
+          .replace('github.com', 'raw.githubusercontent.com')
+          .replace('/blob/', '/');
+      }
+
+      // 2. Fetch the M3U content using double-shield proxy logic
+      let m3uContent = '';
+      let fetchSuccess = false;
+
       if (isBackendAvailable) {
-        // Full stack import via server API
-        const response = await fetch('/api/playlists', {
+        try {
+          const response = await fetch(`/api/proxy-m3u?url=${encodeURIComponent(targetUrl)}`);
+          if (response.ok) {
+            m3uContent = await response.text();
+            fetchSuccess = true;
+          } else {
+            console.warn('Backend proxy-m3u failed, trying client AllOrigins proxy...');
+          }
+        } catch (err) {
+          console.warn('Backend proxy-m3u request failed, trying client AllOrigins proxy...', err);
+        }
+      }
+
+      if (!fetchSuccess) {
+        try {
+          const corsProxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+          const response = await fetch(corsProxyUrl);
+          if (response.ok) {
+            m3uContent = await response.text();
+            fetchSuccess = true;
+          }
+        } catch (err) {
+          console.error('AllOrigins fallback proxy also failed:', err);
+        }
+      }
+
+      if (!fetchSuccess) {
+        throw new Error('Failed to retrieve the M3U playlist. The server returned a network error or the remote host was unreachable. Please verify that the M3U URL is active.');
+      }
+
+      if (!m3uContent || !m3uContent.trim()) {
+        throw new Error('The retrieved playlist content is empty. Please verify the M3U URL.');
+      }
+
+      const trimmedContent = m3uContent.trim();
+      if (trimmedContent.startsWith('<!DOCTYPE') || trimmedContent.startsWith('<html') || trimmedContent.startsWith('<body')) {
+        throw new Error('The URL returned an HTML page instead of a valid plain-text M3U IPTV playlist. If you linked to a file on GitHub, make sure to use the Raw URL.');
+      }
+
+      // 3. Parse the M3U content on the client side
+      setImportProgress('Parsing channels...');
+      const lines = m3uContent.split(/\r?\n/);
+      const importedChannels: Channel[] = [];
+      const playlistId = `pl-${Math.random().toString(36).substring(2, 9)}`;
+      const fifaKeywords = (settings?.fifaKeywords || '').split(',').map(k => (k || '').trim().toLowerCase()).filter(Boolean);
+
+      let currentChannel: Partial<Channel> = {};
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        if (line.startsWith('#EXTINF:')) {
+          const logoMatch = line.match(/tvg-logo="([^"]+)"/i) || 
+                            line.match(/logo="([^"]+)"/i) || 
+                            line.match(/logo-url="([^"]+)"/i) || 
+                            line.match(/icon="([^"]+)"/i) ||
+                            line.match(/art="([^"]+)"/i) ||
+                            line.match(/tvg-logo=\'([^\'\s]+)\'/i) ||
+                            line.match(/logo=\'([^\'\s]+)\'/i);
+          const logo = logoMatch ? logoMatch[1] : '';
+
+          const groupMatch = line.match(/group-title="([^"]+)"/i) ||
+                             line.match(/group="([^"]+)"/i) ||
+                             line.match(/group-title=\'([^\'\s]+)\'/i);
+          const group = groupMatch ? groupMatch[1] : 'Uncategorized';
+
+          let chName = 'Unknown Channel';
+          const commaIndex = line.lastIndexOf(',');
+          if (commaIndex !== -1) {
+            chName = line.substring(commaIndex + 1).trim();
+          }
+
+          const classification = autoCategorize(chName, group, fifaKeywords);
+
+          let finalGroup = 'Other TV Channel';
+          if (group && group !== 'Uncategorized' && group.trim() !== '') {
+            finalGroup = group.trim();
+          } else {
+            finalGroup = classification.group;
+          }
+
+          currentChannel = {
+            name: chName,
+            logo,
+            group: finalGroup,
+            originalGroup: group,
+            isFifa: classification.isFifa,
+            isFeatured: false,
+            score: Math.floor(Math.random() * 50) + 1,
+            isDead: false,
+            playlistId,
+            createdAt: new Date().toISOString()
+          };
+        } else if ((line.startsWith('http') || line.startsWith('https') || line.startsWith('rtmp') || line.startsWith('rtsp')) && currentChannel.name) {
+          currentChannel.url = line;
+          currentChannel.id = `ch-${playlistId}-${Math.random().toString(36).substring(2, 11)}`;
+          importedChannels.push(currentChannel as Channel);
+          currentChannel = {};
+        }
+      }
+
+      if (importedChannels.length === 0) {
+        throw new Error('No valid channels found in this M3U file. Ensure the file contains properly formatted stream URLs and starts with "#EXTM3U".');
+      }
+
+      const newPlaylist: Playlist = {
+        id: playlistId,
+        name: name.trim(),
+        url: targetUrl,
+        createdAt: new Date().toISOString(),
+        channelCount: importedChannels.length
+      };
+
+      // 4. Save to Database
+      if (isBackendAvailable) {
+        setImportProgress('Saving playlist metadata...');
+        // Save Playlist Row
+        const playlistResponse = await fetch('/api/playlists/lightweight', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, url }),
+          body: JSON.stringify(newPlaylist)
         });
 
-        const data = await response.json();
-        if (!response.ok) {
-          throw new Error(data.error || 'Server failed to parse the playlist.');
+        if (!playlistResponse.ok) {
+          const playlistErr = await playlistResponse.json().catch(() => ({}));
+          throw new Error(playlistErr.error || 'Server failed to save playlist metadata.');
         }
 
-        // We need to refetch channels/playlists in App.tsx, but we can pass them up directly if server returns them.
-        // Let's pass up the new playlist and we will trigger refresh in the parent App.tsx!
-        // To be safe, let's pass a placeholder empty array up, parent App will fetch the complete merged list from server.
-        onAddPlaylist(data.playlist, []);
-        setSuccess(`Successfully imported playlist "${name}" with ${data.importedCount} channels!`);
-        setName('');
-        setUrl('');
-      } else {
-        // Backend unavailable -> Client-side fallback parsing (perfect for Vercel!)
-        const playlistId = `pl-${Math.random().toString(36).substring(2, 9)}`;
-        const corsProxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+        // Save channels in small chunks of 200 to prevent Vercel Serverless timeout
+        const chunkSize = 200;
+        const totalChannels = importedChannels.length;
         
-        const response = await fetch(corsProxyUrl);
-        if (!response.ok) {
-          throw new Error(`Could not fetch playlist content (Status: ${response.status} ${response.statusText}). If you are deployed on Vercel, please make sure your Supabase environment variables (SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY) are configured in your Vercel project settings to enable server-side fetching.`);
-        }
-        
-        const m3uContent = await response.text();
-        const lines = m3uContent.split('\n');
-        const importedChannels: Channel[] = [];
-        const fifaKeywords = (settings?.fifaKeywords || '').split(',').map(k => (k || '').trim().toLowerCase()).filter(Boolean);
-        
-        let currentChannel: Partial<Channel> = {};
-        
-        for (let i = 0; i < lines.length; i++) {
-          const line = lines[i].trim();
-          if (!line) continue;
+        for (let i = 0; i < totalChannels; i += chunkSize) {
+          const chunk = importedChannels.slice(i, i + chunkSize);
+          const chunkIndex = Math.floor(i / chunkSize) + 1;
+          const totalChunks = Math.ceil(totalChannels / chunkSize);
           
-          if (line.startsWith('#EXTINF:')) {
-            const logoMatch = line.match(/tvg-logo="([^"]+)"/i) || 
-                              line.match(/logo="([^"]+)"/i) || 
-                              line.match(/logo-url="([^"]+)"/i) || 
-                              line.match(/icon="([^"]+)"/i) ||
-                              line.match(/art="([^"]+)"/i);
-            const logo = logoMatch ? logoMatch[1] : '';
-            
-            const groupMatch = line.match(/group-title="([^"]+)"/i);
-            const group = groupMatch ? groupMatch[1] : 'Uncategorized';
-            
-            let chName = 'Unknown Channel';
-            const commaIndex = line.lastIndexOf(',');
-            if (commaIndex !== -1) {
-              chName = line.substring(commaIndex + 1).trim();
-            }
-            
-            // Automatically categorize channel group and isFifa
-            const classification = autoCategorize(chName, group, fifaKeywords);
-            
-            let finalGroup = 'Other TV Channel';
-            if (group && group !== 'Uncategorized' && group.trim() !== '') {
-              finalGroup = group.trim();
-            } else {
-              finalGroup = classification.group;
-            }
-            
-            currentChannel = {
-              name: chName,
-              logo,
-              group: finalGroup,
-              originalGroup: group,
-              isFifa: classification.isFifa,
-              isFeatured: false,
-              score: Math.floor(Math.random() * 50) + 1,
-              isDead: false,
-              playlistId,
-              createdAt: new Date().toISOString()
-            };
-          } else if (line.startsWith('http') && currentChannel.name) {
-            currentChannel.url = line;
-            currentChannel.id = `ch-${playlistId}-${Math.random().toString(36).substring(2, 11)}`;
-            importedChannels.push(currentChannel as Channel);
-            currentChannel = {};
+          setImportProgress(`Saving channels: ${i} / ${totalChannels} (Chunk ${chunkIndex} of ${totalChunks})...`);
+
+          const chunkResponse = await fetch(`/api/playlists/${playlistId}/channels-chunk`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ channels: chunk })
+          });
+
+          if (!chunkResponse.ok) {
+            const chunkErr = await chunkResponse.json().catch(() => ({}));
+            throw new Error(chunkErr.error || `Server failed to save channel chunk ${chunkIndex}.`);
           }
         }
-        
-        if (importedChannels.length === 0) {
-          throw new Error('No channels found in this M3U file. Ensure it starts with #EXTM3U.');
-        }
-        
-        const newPlaylist: Playlist = {
-          id: playlistId,
-          name,
-          url,
-          createdAt: new Date().toISOString(),
-          channelCount: importedChannels.length
-        };
-        
+
+        onAddPlaylist(newPlaylist, []);
+        setSuccess(`Successfully imported playlist "${name}" with ${totalChannels} channels to Database!`);
+      } else {
+        // Backend unavailable -> Save to Local Sandbox
         onAddPlaylist(newPlaylist, importedChannels);
         setSuccess(`Successfully imported playlist "${name}" (Local Client Mode) with ${importedChannels.length} channels!`);
-        setName('');
-        setUrl('');
       }
+
+      setName('');
+      setUrl('');
     } catch (err: any) {
-      console.error(err);
-      setError(err.message || 'An unexpected error occurred while parsing the playlist.');
+      console.error('Import error:', err);
+      setError(err.message || 'An unexpected error occurred while importing the playlist.');
     } finally {
       setIsImporting(false);
+      setImportProgress(null);
     }
   };
 
@@ -346,12 +419,18 @@ export default function AdminPlaylists({
           <button
             type="submit"
             disabled={isImporting}
-            className="flex items-center justify-center gap-2 w-full py-2.5 bg-rose-600 hover:bg-rose-500 disabled:bg-neutral-800 text-white font-sans text-xs font-bold rounded-xl shadow-lg hover:shadow-rose-600/10 active:scale-[0.98] transition-all cursor-pointer"
+            className="flex items-center justify-center gap-2 w-full py-2.5 bg-rose-600 hover:bg-rose-500 disabled:bg-neutral-800 text-white font-sans text-xs font-bold rounded-xl shadow-lg hover:shadow-rose-600/10 active:scale-[0.98] transition-all cursor-pointer text-center"
           >
             {isImporting ? (
-              <>
-                <RefreshCw size={14} className="animate-spin" /> Importing & Parsing...
-              </>
+              <div className="flex flex-col items-center justify-center w-full py-0.5">
+                <div className="flex items-center justify-center gap-2">
+                  <RefreshCw size={14} className="animate-spin text-rose-200" />
+                  <span>Importing & Saving...</span>
+                </div>
+                {importProgress && (
+                  <span className="text-[10px] text-rose-200/80 font-mono font-medium mt-0.5">{importProgress}</span>
+                )}
+              </div>
             ) : (
               <>
                 <Plus size={14} /> Import Playlist

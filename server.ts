@@ -433,6 +433,65 @@ app.post('/api/playlists', async (req, res) => {
   }
 });
 
+// Save lightweight playlist (insert/upsert playlist record)
+app.post('/api/playlists/lightweight', async (req, res) => {
+  try {
+    const { id, name, url, channelCount, createdAt } = req.body;
+    if (!id || !name || !url) {
+      return res.status(400).json({ error: 'Playlist ID, Name, and Stream URL are required' });
+    }
+
+    const supabase = getSupabase();
+    if (!supabase) {
+      return res.status(500).json({ error: 'Database connection is not configured. Please ensure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are correctly defined in your settings.' });
+    }
+
+    const playlist: Playlist = {
+      id,
+      name,
+      url,
+      createdAt: createdAt || new Date().toISOString(),
+      channelCount: channelCount || 0
+    };
+
+    await addPlaylist(playlist);
+    res.json({ playlist });
+  } catch (error: any) {
+    console.error('Failed to save lightweight playlist:', error);
+    res.status(500).json({ error: error.message || 'Failed to save playlist record' });
+  }
+});
+
+// Save a chunk of channels for a playlist
+app.post('/api/playlists/:playlistId/channels-chunk', async (req, res) => {
+  try {
+    const { playlistId } = req.params;
+    const { channels } = req.body;
+    if (!playlistId || !Array.isArray(channels)) {
+      return res.status(400).json({ error: 'Playlist ID and channels array are required' });
+    }
+
+    const supabase = getSupabase();
+    if (!supabase) {
+      return res.status(500).json({ error: 'Database connection is not configured. Please ensure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are correctly defined in your settings.' });
+    }
+
+    await batchAddChannels(channels);
+
+    // Auto-register any new categories found in this chunk
+    try {
+      registerCategoriesFromChannels(channels);
+    } catch (catErr: any) {
+      console.error('Category auto-registration warning:', catErr);
+    }
+
+    res.json({ success: true, count: channels.length });
+  } catch (error: any) {
+    console.error('Failed to save channels chunk:', error);
+    res.status(500).json({ error: error.message || 'Failed to save channels chunk' });
+  }
+});
+
 // Delete playlist
 app.delete('/api/playlists/:id', async (req, res) => {
   try {
