@@ -4,7 +4,6 @@ import path from 'path';
 import http from 'http';
 import https from 'https';
 import fs from 'fs';
-import { createServer as createViteServer } from 'vite';
 import { Channel, Playlist, SiteSettings } from './src/types';
 import {
   getSettings,
@@ -1153,6 +1152,7 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 // -----------------------------------------------------------------------------
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
@@ -1166,14 +1166,13 @@ async function startServer() {
     });
   }
 
-  // Only start listening if we are running standalone and NOT as a Vercel serverless function
-  if (!process.env.VERCEL) {
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`Server running on http://localhost:${PORT}`);
-    });
-  }
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+}
 
 export default app;
